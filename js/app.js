@@ -33,7 +33,7 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
   var tt;
   function toast(msg) { var t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(tt); tt = setTimeout(function () { t.classList.remove('show'); }, 2400); }
   function stars(r) {
-    var out = '<span class="stars" aria-label="' + r + ' out of 5">';
+    var out = '<span class="stars" role="img" aria-label="' + r + ' out of 5">';
     for (var i = 1; i <= 5; i++) out += I.star.replace('<svg', '<svg class="' + (r >= i - .25 ? '' : 'off') + '"');
     return out + '</span>';
   }
@@ -50,6 +50,19 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
     var sample = db.products.filter(function (p) { return p.category === c.id; })[0];
     return SCG.productSVG(c.shape, c.icon || (sample && sample.color) || '#0b2a6f', 'solid', '#f3f4f6');
   }
+  /** Units of this product still for sale in this size. The shop server sends stock per size (p.variants);
+      the offline demo only knows the product total. */
+  function stockFor(p, size) {
+    var vars = (p && p.variants) || [];
+    if (!vars.length) return Math.max(0, +(p && p.stock) || 0);
+    var v = vars.filter(function (x) { return (x.size || '') === (size || ''); })[0];
+    return v ? Math.max(0, +v.stock || 0) : 0;
+  }
+  /** How many of this product (in this size, when stock is per size) are already in the cart. */
+  function inCartFor(p, size, cart) {
+    if (!((p && p.variants) || []).length) return inCart(p.id, cart);
+    return (cart || SCG.getCart()).reduce(function (n, l) { return n + (l.id === p.id && (l.size || '') === (size || '') ? l.qty : 0); }, 0);
+  }
   function fmtCount(n) { return n >= 1000 ? (n / 1000).toFixed(1).replace('.0', '') + 'k' : String(n); }
   function sortNewest(a, b) { return (b.createdAt || 0) - (a.createdAt || 0); }
   function setTitle(t) { document.title = t ? t + ' | Source Connect Global' : 'Source Connect Global'; }
@@ -58,7 +71,8 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
   function card(p, opts) {
     opts = opts || {};
     var off = SCG.discount(p), wish = SCG.getWish().indexOf(p.id) > -1, imgs = SCG.productImages(p);
-    var soldPct = Math.min(96, 30 + (p.sold % 60));
+    var sold = Math.max(0, +p.sold || 0), units = sold + Math.max(0, +p.stock || 0);
+    var soldPct = sold && units ? Math.max(8, Math.min(100, Math.round(sold / units * 100))) : 0;
     return '<article class="card" data-ed="product" data-id="' + p.id + '" style="--c:' + p.color + '">' +
       '<a class="media' + (imgs[1] ? ' has-alt' : '') + '" href="#p/' + p.id + '" aria-label="' + esc(p.name) + '">' + visual(p) + (imgs[1] ? '<img class="alt" src="' + SCG.imgSrc(imgs[1]) + '" alt="" loading="lazy">' : '') +
       (off ? '<span class="tag-off">-' + off + '%</span>' : (p.badge === 'New' ? '<span class="tag-new">NEW</span>' : '')) + '</a>' +
@@ -67,7 +81,7 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
       '<div class="price">' + money(p.price) + '</div>' +
       '<div class="was">' + (p.comparePrice ? '<s>' + money(p.comparePrice) + '</s><b>-' + off + '%</b>' : '') + '</div>' +
       (opts.flash
-        ? '<div class="soldbar' + (soldPct < 45 ? ' lo' : '') + '"><i style="width:' + soldPct + '%"></i><span>' + fmtCount(p.sold) + ' sold</span></div>'
+        ? '<div class="soldbar' + (soldPct < 45 ? ' lo' : '') + '"><i style="width:' + soldPct + '%"></i><span>' + (sold ? fmtCount(sold) + ' sold' : 'New deal') + '</span></div>'
         : '<div class="meta">' + ratingLine(p) + '</div>' + originTag(p)) +
       (opts.add ? '<div class="add-mini">' + (p.stock > 0 ? '<button data-add="' + p.id + '">Add to Cart</button>' : '<button disabled>Out of stock</button>') + '</div>' : '') +
       '</div></article>';
@@ -256,9 +270,9 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
         return '<section class="sec" data-ed="origins"><div class="sec-head"><h2>' + esc(sec.title || 'Shop by Country') + '</h2><a class="more" href="#china-direct">How importing works</a></div><div class="countries">' +
           list.map(function (o) {
             var n = db.products.filter(function (p) { return p.origin === o.id; }).length;
-            return '<a class="country" href="#from/' + o.id + '">' + codeBadge(o.code) + '<b>' + esc(o.name) + '</b><small>' + n + (n === 1 ? ' product · ' : ' products · ') + esc(o.days) + ' days</small></a>';
+            return '<a class="country" href="#from/' + o.id + '">' + codeBadge(o.code) + '<b>' + esc(o.name) + '</b><small>' + (n ? n + (n === 1 ? ' product · ' : ' products · ') : '') + esc(o.days) + ' days</small></a>';
           }).join('') +
-          '<a class="country local" href="#from/local">' + codeBadge('LK') + '<b>Colombo stock</b><small>' + (function (n) { return n + (n === 1 ? ' product · ' : ' products · '); })(db.products.filter(function (p) { return !p.origin || p.origin === 'local'; }).length) + esc(s.localDays) + ' days</small></a></div></section>';
+          '<a class="country local" href="#from/local">' + codeBadge('LK') + '<b>Colombo stock</b><small>' + (function (n) { return n ? n + (n === 1 ? ' product · ' : ' products · ') : ''; })(db.products.filter(function (p) { return !p.origin || p.origin === 'local'; }).length) + esc(s.localDays) + ' days</small></a></div></section>';
       },
       electronics: function (sec) { return rail(sec.title || 'Electronics', '#col/electronics', db.products.filter(function (p) { return (p.collections || []).indexOf('electronics') > -1; }).sort(function (a, b) { return b.sold - a.sold; }).slice(0, 12), 'data-ed="collection" data-id="electronics"'); },
       collections: function () {
@@ -267,8 +281,16 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
           return list.length ? rail(c.name, '#col/' + c.id, list, 'data-ed="collection" data-id="' + c.id + '"') : '';
         }).join('');
       },
-      china: function (sec) { return rail(sec.title || 'China Direct', '#col/china-direct', db.products.filter(function (p) { return p.origin === 'china'; }).sort(function (a, b) { return SCG.discount(b) - SCG.discount(a); }).slice(0, 12)); },
-      best: function (sec) { return rail(sec.title || 'Best Sellers', '#col/best-sellers', db.products.slice().sort(function (a, b) { return b.sold - a.sold; }).slice(0, 12)); },
+      china: function (sec) {
+        return rail(sec.title || 'China Direct', SCG.collectionProducts('china-direct').length ? '#col/china-direct' : '#from/china',
+          db.products.filter(function (p) { return p.origin === 'china'; }).sort(function (a, b) { return SCG.discount(b) - SCG.discount(a); }).slice(0, 12));
+      },
+      best: function (sec) {
+        // the owner's own "Best Sellers" collection when it has products; otherwise what really sold (nothing sold yet = no row)
+        var picked = SCG.collectionProducts('best-sellers');
+        var list = picked.length ? picked : db.products.filter(function (p) { return p.sold > 0; }).sort(function (a, b) { return b.sold - a.sold; });
+        return rail(sec.title || 'Best Sellers', picked.length ? '#col/best-sellers' : '#shop', list.slice(0, 12));
+      },
       jfy: function (sec) {
         return '<div class="jfy-head"><h2>' + esc(sec.title || 'Just For You') + '</h2><div class="jfy-tabs" id="jfyTabs"><button class="on" data-t="all">All</button>' + db.categories.map(function (c) { return '<button data-t="' + c.id + '">' + esc(c.name) + '</button>'; }).join('') + '</div></div>' +
           '<div class="grid" id="jfy"></div><div class="loader" id="jfyMore"><span class="spinner"></span>Loading more products…</div>';
@@ -375,21 +397,21 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
 
   /* ---------------- LISTING ---------------- */
   function renderListing(kind, val, extra) {
-    var title = 'All Products', sub = 'Everything we sell, in one place.', color = '#0b2a6f', art = 'tshirt', artImg = '', cover = '';
+    var title = 'All Products', sub = 'Everything we sell, in one place.', color = '#0b2a6f', art = 'tshirt', artImg = '';
     var st = { cats: [], min: '', max: '', rating: 0, origins: [], sale: false, sort: 'pop', q: '', coll: '', limit: 30 };
     if (kind === 'c') { var c = SCG.categoryById(val); if (c) { title = c.name; sub = c.tagline; color = c.icon || color; art = c.shape; artImg = c.image || ''; st.cats = [c.id]; } }
-    if (kind === 'col') { var co = SCG.collectionById(val); if (co) { title = co.name; sub = co.description; color = co.accent; art = 'bag'; cover = co.image || ''; st.coll = co.id; st.sort = 'rec'; } }
+    if (kind === 'col') { var co = SCG.collectionById(val); if (co) { title = co.name; sub = co.description; color = co.accent; art = 'bag'; artImg = co.image || ''; st.coll = co.id; st.sort = 'rec'; } }
     if (kind === 'flash') { title = db.settings.flashTitle || 'Flash Sale'; sub = flashOn() ? 'Huge discounts for a limited time.' : 'This flash sale has ended. Check back soon for new deals.'; color = '#d7141a'; art = 'sneaker'; st.flashOnly = true; st.sort = 'off'; }   // same products as the homepage Flash Sale row (a flash item needs no old price)
     if (kind === 'from') { var oi = val === 'local' ? { name: 'Colombo stock', days: db.settings.localDays, local: true } : SCG.originById(val); if (oi) { title = oi.local ? 'Ships from Colombo' : 'Imported from ' + oi.name; sub = 'Delivered to your door in ' + oi.days + ' days.'; color = '#0f766e'; art = 'bag'; st.origins = [val]; } }
     if (kind === 'search') { st.q = val; title = 'Results for “' + val + '”'; sub = ''; if (extra) st.cats = [extra]; }
     setTitle(kind === 'search' ? 'Search' : title);
 
     app.innerHTML = '<div class="wrap"><div class="crumbs"><a href="#">Home</a>›<span>' + esc(title) + '</span></div>' +
-      (kind !== 'search' ? '<div class="cat-hero reveal" ' + ({ c: 'data-ed="category" data-id="' + esc(val) + '"', col: 'data-ed="collection" data-id="' + esc(val) + '"', flash: 'data-ed="flash"', from: 'data-ed="origins"', shop: '' }[kind] || '') + ' style="--c:' + color + (cover ? ';--cover:url(' + SCG.imgSrc(String(cover).replace(/[()'"\\\s]/g, encodeURIComponent)) + ')' : '') + '"' + (cover ? ' data-cover' : '') + '><h1>' + esc(title) + '</h1><p>' + esc(sub) + '</p>' + (kind === 'flash' && flashOn() ? '<p style="margin-top:8px">' + cdHTML() + '</p>' : '') + (cover ? '' : '<div class="art' + (artImg ? ' photo' : '') + '">' + (artImg ? '<img src="' + SCG.imgSrc(artImg) + '" alt="">' : SCG.productSVG(art, '#ffffff', 'solid', color)) + '</div>') + '</div>' : '') +
+      (kind !== 'search' ? '<div class="cat-hero reveal" ' + ({ c: 'data-ed="category" data-id="' + esc(val) + '"', col: 'data-ed="collection" data-id="' + esc(val) + '"', flash: 'data-ed="flash"', from: 'data-ed="origins"', shop: '' }[kind] || '') + ' style="--c:' + color + '"><h1>' + esc(title) + '</h1><p>' + esc(sub) + '</p>' + (kind === 'flash' && flashOn() ? '<p style="margin-top:8px">' + cdHTML() + '</p>' : '') + '<div class="art' + (artImg ? ' photo' : '') + '">' + (artImg ? '<img src="' + SCG.imgSrc(artImg) + '" alt="">' : SCG.productSVG(art, '#ffffff', 'solid', color)) + '</div></div>' : '') +
       '<div class="listing"><aside class="panel filters" id="filters">' +
         '<div class="grp"><h4>Category</h4>' + db.categories.map(function (c) { return '<label><input type="checkbox" name="fc" value="' + c.id + '"' + (st.cats.indexOf(c.id) > -1 ? ' checked' : '') + '>' + esc(c.name) + '</label>'; }).join('') + '</div>' +
         '<div class="grp"><h4>Price (Rs.)</h4><div class="price-row"><input id="fmin" type="number" min="0" placeholder="Min" aria-label="Minimum price"><span aria-hidden="true">–</span><input id="fmax" type="number" min="0" placeholder="Max" aria-label="Maximum price"></div></div>' +
-        '<div class="grp"><h4>Rating</h4>' + [0, 4.5, 4, 3.5].map(function (r) { return '<label><input type="radio" name="fr" value="' + r + '"' + (r === 0 ? ' checked' : '') + '>' + (r ? stars(r) + ' ' + r + ' &amp; up' : 'Any rating') + '</label>'; }).join('') + '</div>' +
+        (db.products.some(function (p) { return p.reviews > 0; }) ? '<div class="grp"><h4>Rating</h4>' + [0, 4.5, 4, 3.5].map(function (r) { return '<label><input type="radio" name="fr" value="' + r + '"' + (r === 0 ? ' checked' : '') + '>' + (r ? stars(r) + ' ' + r + ' &amp; up' : 'Any rating') + '</label>'; }).join('') + '</div>' : '') +
         '<div class="grp"><h4>Shipped from</h4>' + activeOrigins().map(function (o) { return '<label><input type="checkbox" name="fo" value="' + o.id + '"' + (st.origins.indexOf(o.id) > -1 ? ' checked' : '') + '>' + esc(o.name) + ' (' + esc(o.days) + ' days)</label>'; }).join('') + '<label><input type="checkbox" name="fo" value="local"' + (st.origins.indexOf('local') > -1 ? ' checked' : '') + '>Colombo stock (' + esc(db.settings.localDays) + ' days)</label></div>' +
         '<div class="grp"><h4>Offers</h4><label><input type="checkbox" id="fsale"' + (st.sale ? ' checked' : '') + '>On discount only</label></div>' +
         '<button class="btn full filter-btn" id="fDone">Show results</button>' +
@@ -448,7 +470,10 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
     if (!p) { app.innerHTML = '<div class="wrap"><div class="panel empty" style="margin-top:16px"><h3>Product not found</h3><a class="btn" href="#">Back to home</a></div></div>'; return; }
     setTitle(p.name);
     var cat = SCG.categoryById(p.category), off = SCG.discount(p), vars = variants(p), imgs = SCG.productImages(p), oi = SCG.originInfo(p);
-    var st = { color: vars[0], size: (p.sizes || [])[Math.min(1, (p.sizes || []).length - 1)] || '', qty: 1 };
+    // start on a size that can be bought (the usual second size when it is in stock, else the first size in stock)
+    var sizes = p.sizes || [], defSize = sizes[Math.min(1, sizes.length - 1)] || '';
+    var buyable = sizes.filter(function (z) { return stockFor(p, z) > 0; });
+    var st = { color: vars[0], size: !sizes.length || stockFor(p, defSize) > 0 ? defSize : (buyable[0] || defSize), qty: 1 };
     var related = db.products.filter(function (x) { return x.category === p.category && x.id !== p.id; }).slice(0, 12);
     var dist = [.62, .22, .09, .04, .03].map(function (k, i) { return Math.round(p.reviews * (p.rating >= 4.5 ? k : [.4, .3, .17, .08, .05][i])); });
     var s = db.settings;
@@ -462,9 +487,9 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
           (isFlash(p) ? '<div class="flash-strip"><span>⚡ ' + esc(db.settings.flashTitle || 'Flash Sale') + '</span>' + cdHTML() + '</div>' : '') +
           '<div class="price-box"><div class="now">' + money(p.price) + '</div>' + (p.comparePrice ? '<div class="old"><s>' + money(p.comparePrice) + '</s><b>-' + off + '%</b></div>' : '') + '</div>' +
           (vars.length > 1 ? '<div class="opt"><span>Colour</span><div class="swatches" id="sw">' + vars.map(function (c, i) { return '<button class="' + (i ? '' : 'on') + '" data-c="' + c + '" aria-label="Colour ' + (i + 1) + '">' + visual(p, c) + '</button>'; }).join('') + '</div></div>' : '') +
-          ((p.sizes || []).length ? '<div class="opt"><span>Size</span><div class="sizes" id="sz">' + p.sizes.map(function (z) { return '<button class="' + (z === st.size ? 'on' : '') + '" data-s="' + esc(z) + '">' + esc(z) + '</button>'; }).join('') + '</div></div>' : '') +
-          '<div class="opt"><span>Quantity</span><div><div class="qty"><button data-q="-1" aria-label="Less">−</button><span id="qv">1</span><button data-q="1" aria-label="More">+</button></div> <small style="color:' + (p.stock > 0 ? 'var(--muted)' : 'var(--red)') + ';margin-left:8px">' + (p.stock > 0 ? p.stock + ' available' : 'Out of stock') + '</small></div></div>' +
-          '<div class="buy-row"><button class="btn navy" id="buyNow"' + (p.stock > 0 ? '' : ' disabled') + '>' + (p.stock > 0 ? 'Buy Now' : 'Out of stock') + '</button><button class="btn" id="addCart"' + (p.stock > 0 ? '' : ' disabled') + '>Add to Cart</button><button class="btn line heart-btn" data-wish="' + p.id + '" aria-label="Wishlist" style="flex:0 0 auto;padding:14px">' + I.heart + '</button></div>' +
+          ((p.sizes || []).length ? '<div class="opt"><span>Size</span><div class="sizes" id="sz">' + p.sizes.map(function (z) { var left = stockFor(p, z); return '<button class="' + (z === st.size ? 'on' : '') + (left > 0 ? '' : ' out') + '" data-s="' + esc(z) + '"' + (left > 0 ? '' : ' disabled title="Out of stock" aria-label="' + esc(z) + ', out of stock"') + '>' + esc(z) + '</button>'; }).join('') + '</div></div>' : '') +
+          '<div class="opt"><span>Quantity</span><div><div class="qty"><button data-q="-1" aria-label="Less">−</button><span id="qv">1</span><button data-q="1" aria-label="More">+</button></div> <small id="avail" style="margin-left:8px"></small></div></div>' +
+          '<div class="buy-row"><button class="btn navy" id="buyNow">Buy Now</button><button class="btn" id="addCart">Add to Cart</button><button class="btn line heart-btn" data-wish="' + p.id + '" aria-label="Wishlist" style="flex:0 0 auto;padding:14px">' + I.heart + '</button></div>' +
         '</div></div>' +
         '<div class="panel tabs-box"><nav id="ptabs"><button class="on" data-t="d">Description</button><button data-t="s">Specifications</button><button data-t="r">Ratings</button></nav><div class="body" id="pbody"></div></div>' +
       '</div>' +
@@ -485,7 +510,7 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
 
     function tab(t) {
       $$('#ptabs button').forEach(function (b) { b.classList.toggle('on', b.dataset.t === t); });
-      $('#pbody').innerHTML = t === 'd' ? '<p style="margin-top:0">' + esc(p.description) + '</p><ul style="color:var(--muted)"><li>Brand: ' + esc(p.brand) + '</li><li>' + (oi.local ? 'Ships from Colombo (' + esc(oi.days) + ' days)' : 'Imported from ' + esc(oi.name) + ' (' + esc(oi.days) + ' days)') + '</li>' + (s.payCOD ? '<li>Cash on Delivery available islandwide</li>' : '') + '</ul>'
+      $('#pbody').innerHTML = t === 'd' ? '<p style="margin-top:0;white-space:pre-line">' + esc(p.description) + '</p><ul style="color:var(--muted)"><li>Brand: ' + esc(p.brand) + '</li><li>' + (oi.local ? 'Ships from Colombo (' + esc(oi.days) + ' days)' : 'Imported from ' + esc(oi.name) + ' (' + esc(oi.days) + ' days)') + '</li>' + (s.payCOD ? '<li>Cash on Delivery available islandwide</li>' : '') + '</ul>'
         : t === 's' ? '<table class="spec"><tr><td>Brand</td><td>' + esc(p.brand) + '</td></tr><tr><td>Category</td><td>' + esc(cat ? cat.name : '') + '</td></tr><tr><td>SKU</td><td>' + esc(p.id.toUpperCase()) + '</td></tr>' + ((p.sizes || []).length ? '<tr><td>Sizes</td><td>' + esc(p.sizes.join(', ')) + '</td></tr>' : '') + '<tr><td>Ships from</td><td>' + (oi.local ? 'Colombo stock' : esc(oi.name)) + '</td></tr><tr><td>In stock</td><td>' + p.stock + '</td></tr></table>'
           : !p.reviews ? '<p style="margin:0;color:var(--muted)">No ratings yet. Ratings appear here after customers review this product.</p>' : '<div class="rating-sum"><div><div class="big">' + p.rating + '<small style="font-size:18px;color:var(--muted)">/5</small></div>' + stars(p.rating) + '<div style="color:var(--muted);font-size:12px">' + p.reviews + ' ratings</div></div><div class="rbars">' + dist.map(function (n, i) { return '<div><span>' + (5 - i) + '★</span><i><em style="width:' + (p.reviews ? n / p.reviews * 100 : 0) + '%"></em></i><span>' + n + '</span></div>'; }).join('') + '</div></div>';
     }
@@ -495,8 +520,18 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
     function pick(c) { st.color = c; $('#big').innerHTML = visual(p, c); ['#thumbs', '#sw'].forEach(function (s) { if ($(s)) $$('button', $(s)).forEach(function (b) { b.classList.toggle('on', b.dataset.c === c); }); }); }
     // colour buttons only (photo thumbnails have their own handler above)
     ['#thumbs', '#sw'].forEach(function (s) { if ($(s)) $(s).onclick = function (e) { var b = e.target.closest('button[data-c]'); if (b) pick(b.dataset.c); }; });
-    if ($('#sz')) $('#sz').onclick = function (e) { var b = e.target.closest('button'); if (!b) return; st.size = b.dataset.s; $$('#sz button').forEach(function (x) { x.classList.toggle('on', x === b); }); };
-    $$('[data-q]').forEach(function (b) { b.onclick = function () { st.qty = Math.max(1, Math.min(Math.max(1, p.stock), st.qty + +b.dataset.q)); $('#qv').textContent = st.qty; }; });
+    // what can be bought in the chosen size: the "N available" note, the quantity limit and the buy buttons all follow it
+    function avail() {
+      var left = stockFor(p, st.size), a = $('#avail');
+      st.qty = Math.max(1, Math.min(st.qty, Math.max(1, left))); $('#qv').textContent = st.qty;
+      a.textContent = left > 0 ? left + ' available' + ((p.variants || []).length && sizes.length > 1 ? ' in size ' + st.size : '') : 'Out of stock';
+      a.style.color = left > 0 ? 'var(--muted)' : 'var(--red)';
+      $('#buyNow').disabled = $('#addCart').disabled = left <= 0;
+      $('#buyNow').textContent = left > 0 ? 'Buy Now' : 'Out of stock';
+    }
+    if ($('#sz')) $('#sz').onclick = function (e) { var b = e.target.closest('button'); if (!b || b.disabled) return; st.size = b.dataset.s; $$('#sz button').forEach(function (x) { x.classList.toggle('on', x === b); }); avail(); };
+    $$('[data-q]').forEach(function (b) { b.onclick = function () { st.qty = Math.max(1, Math.min(Math.max(1, stockFor(p, st.size)), st.qty + +b.dataset.q)); $('#qv').textContent = st.qty; }; });
+    avail();
     var big = $('#big');
     big.addEventListener('mousemove', function (e) { var r = big.getBoundingClientRect(), el = big.firstElementChild; el.style.transformOrigin = ((e.clientX - r.left) / r.width * 100) + '% ' + ((e.clientY - r.top) / r.height * 100) + '%'; el.style.transform = 'scale(1.8)'; });
     big.addEventListener('mouseleave', function () { big.firstElementChild.style.transform = ''; });
@@ -548,7 +583,7 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
       lines.map(function (x) {
         return '<div class="cart-row"><input type="checkbox" data-sel="' + x.i + '"' + (x.l.sel !== false ? ' checked' : '') + ' aria-label="Select"><a class="th" href="#p/' + x.p.id + '" style="background:' + SCG.shade(x.l.color || x.p.color, 175) + '">' + visual(x.p, x.l.color) + '</a>' +
           '<div><h4><a href="#p/' + x.p.id + '">' + esc(x.p.name) + '</a></h4><small>' + (x.l.size ? 'Size: ' + esc(x.l.size) + ' · ' : '') + esc(x.p.brand) + '</small><div style="margin-top:6px">' + originTag(x.p) + '</div>' +
-          '<div class="qty" style="margin-top:8px"><button data-cq="-1" data-i="' + x.i + '" aria-label="Decrease quantity">−</button><span>' + x.l.qty + '</span><button data-cq="1" data-i="' + x.i + '" aria-label="Increase quantity">+</button></div>' + (inCart(x.p.id) > x.p.stock ? '<div class="stock-warn">' + (x.p.stock > 0 ? 'Only ' + x.p.stock + ' left. Lower the quantity to check out.' : 'Out of stock. Please remove it.') + '</div>' : '') + '</div>' +
+          '<div class="qty" style="margin-top:8px"><button data-cq="-1" data-i="' + x.i + '" aria-label="Decrease quantity">−</button><span>' + x.l.qty + '</span><button data-cq="1" data-i="' + x.i + '" aria-label="Increase quantity">+</button></div>' + (function (left) { return inCartFor(x.p, x.l.size) > left ? '<div class="stock-warn">' + (left > 0 ? 'Only ' + left + ' left' + (x.l.size && (x.p.variants || []).length ? ' in size ' + esc(x.l.size) : '') + '. Lower the quantity to check out.' : (x.l.size && (x.p.variants || []).length ? 'Size ' + esc(x.l.size) + ' is out of stock' : 'Out of stock') + '. Please remove it.') + '</div>' : ''; })(stockFor(x.p, x.l.size)) + '</div>' +
           '<div class="p">' + money(x.p.price * x.l.qty) + (x.p.comparePrice ? '<div style="font-size:12px;color:var(--muted);font-weight:400"><s>' + money(x.p.comparePrice * x.l.qty) + '</s></div>' : '') + '</div>' +
           '<button class="rm" data-rm="' + x.i + '" aria-label="Remove">' + I.trash + '</button></div>';
       }).join('') + '</div>' +
@@ -568,8 +603,8 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
     app.onclick = function (e) {
       var cart = SCG.getCart(), b = e.target.closest('button'); if (!b) return;
       if (b.dataset.cq) {
-        var l = cart[+b.dataset.i], pr = SCG.productById(l.id), room = pr ? pr.stock - inCart(l.id, cart) : 0;
-        if (+b.dataset.cq > 0 && room <= 0) { toast('Only ' + (pr ? pr.stock : 0) + ' in stock'); return; }
+        var l = cart[+b.dataset.i], pr = SCG.productById(l.id), left = pr ? stockFor(pr, l.size) : 0, room = pr ? left - inCartFor(pr, l.size, cart) : 0;
+        if (+b.dataset.cq > 0 && room <= 0) { toast('Only ' + left + ' in stock' + (pr && l.size && (pr.variants || []).length ? ' in size ' + l.size : '')); return; }
         l.qty = Math.max(1, l.qty + +b.dataset.cq);
       }
       else if (b.dataset.rm) cart.splice(+b.dataset.rm, 1);
@@ -889,7 +924,7 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
   function renderCategories() {
     setTitle('Categories');
     app.innerHTML = '<div class="wrap"><div class="crumbs"><a href="#">Home</a>›<span>Categories</span></div><div class="panel catgrid" style="overflow:hidden">' +
-      db.categories.map(function (c) { var n = db.products.filter(function (p) { return p.category === c.id; }).length; return '<a class="cat" href="#c/' + c.id + '" style="--c:' + (c.icon || '#0b2a6f') + '"><span class="ci">' + catIcon(c) + '</span>' + esc(c.name) + '<small style="color:var(--muted)">' + n + (n === 1 ? ' item' : ' items') + '</small></a>'; }).join('') + '</div></div>';
+      db.categories.map(function (c) { var n = db.products.filter(function (p) { return p.category === c.id; }).length; return '<a class="cat" href="#c/' + c.id + '" style="--c:' + (c.icon || '#0b2a6f') + '"><span class="ci">' + catIcon(c) + '</span>' + esc(c.name) + '<small style="color:var(--muted)">' + (n ? n + (n === 1 ? ' item' : ' items') : '&nbsp;') + '</small></a>'; }).join('') + '</div></div>';
   }
   function renderChinaDirect() {
     setTitle('How importing works');

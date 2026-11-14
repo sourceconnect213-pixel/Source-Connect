@@ -18,7 +18,7 @@
   }
   var io = new IntersectionObserver(function (entries) {
     entries.forEach(function (e) { if (e.isIntersecting) { io.unobserve(e.target); show(e.target); } });
-  }, { rootMargin: '0px 0px -4% 0px', threshold: 0.01 });
+  }, { threshold: 0.01 });   // any visible part counts, so a picture at the very bottom of a page is never left hidden
 
   function tag(img) {
     if (img.classList.contains('ia') || img.classList.contains('alt')) return;   // .alt = second photo, shown only on hover
