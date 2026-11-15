@@ -43,6 +43,8 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
     return o.local ? '<span class="origin local">' + I.truck + 'Ships from Colombo</span>' : '<span class="origin">' + I.plane + esc(o.label) + '</span>';
   }
   function codeBadge(code) { return '<span class="cc">' + esc(code || '') + '</span>'; }
+  /** Bank transfer is offered only once the owner has entered real bank details (the sample account number is not real). */
+  function bankReady() { var s = db.settings; return !!s.payBank && !/0000000000/.test(s.bankDetails || ''); }
   function activeOrigins() { return SCG.origins().filter(function (o) { return o.on; }); }
   function visual(p, color) { return SCG.productVisual(p, color); }
   function catIcon(c) {
@@ -107,7 +109,7 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
       (s.whatsapp ? '<li><a target="_blank" rel="noopener" href="https://wa.me/' + esc(s.whatsapp) + '">WhatsApp us ↗</a></li>' : '');
     $('#year').textContent = new Date().getFullYear();
     $('#navLinks').innerHTML = (s.navLinks || []).map(function (l) { return '<a href="' + esc(l.link || '#') + '"' + (l.hot ? ' class="hot"' : '') + '>' + esc(l.label) + '</a>'; }).join('');
-    $('#payList').innerHTML = (s.paymentMethods || []).map(function (m) { return '<span>' + esc(m) + '</span>'; }).join('');
+    $('#payList').innerHTML = (s.paymentMethods || []).filter(function (m) { return m !== 'Bank Transfer' || bankReady(); }).map(function (m) { return '<span>' + esc(m) + '</span>'; }).join('');
     // position the fixed dropdown under its button
     var btn = $('#catsBtn'), menu = $('#catsMenu');
     $('.cats-drop').addEventListener('mouseenter', function () { var b = btn.getBoundingClientRect(); menu.style.left = b.left + 'px'; menu.style.top = b.bottom + 'px'; });
@@ -638,7 +640,7 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
       '<label class="full">Note for delivery (optional)<textarea name="note" rows="2"></textarea></label>' +
       '<h3 style="margin-top:6px">Payment method</h3><div class="pay-opts full">' +
       (s.payCOD !== false ? '<label class="pay-opt"><input type="radio" name="pay" value="Cash on Delivery" required>' + I.cash + '<span><b>Cash on Delivery</b><br><small>Pay when your order arrives</small></span></label>' : '') +
-      (s.payBank ? '<label class="pay-opt"><input type="radio" name="pay" value="Bank Transfer" required>' + I.shield + '<span><b>Bank Transfer</b><br><small>Bank details are shown after you place the order</small></span></label>' : '') + '</div>' +
+      (bankReady() ? '<label class="pay-opt"><input type="radio" name="pay" value="Bank Transfer" required>' + I.shield + '<span><b>Bank Transfer</b><br><small>Bank details are shown after you place the order</small></span></label>' : '') + '</div>' +
       (impNames.length ? '<p class="full" style="margin:0;font-size:12.5px;color:var(--muted)">' + I.plane.replace('<svg', '<svg style="width:14px;height:14px;vertical-align:-2px"') + ' Imported items: ' + impNames.map(function (n) { return esc(n) + ' ' + esc(imported[n]) + ' days'; }).join(', ') + '.</p>' : '') +
       '<button class="btn lg full" style="grid-column:1/-1">Place Order · ' + money(t.total) + '</button></form>' +
       '<aside class="panel summary"><h3>Your order</h3>' + lines.map(function (x) { return '<div class="sum-row" style="gap:10px"><span style="color:var(--text)">' + esc(x.p.name) + ' <small style="color:var(--muted)">×' + x.l.qty + (x.l.size ? ' · ' + esc(x.l.size) : '') + '</small></span><span>' + money(x.p.price * x.l.qty) + '</span></div>'; }).join('') +
@@ -726,7 +728,7 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
       '<h3 style="margin-top:6px">Payment method</h3><div class="pay-opts full">' +
       (s.payOnline ? '<label class="pay-opt"><input type="radio" name="pay" value="Card" required>' + I.shield + '<span><b>Card / online payment</b><br><small>Visa, Mastercard and more through PayHere</small></span></label>' : '') +
       (s.payCOD ? '<label class="pay-opt"><input type="radio" name="pay" value="Cash on Delivery" required>' + I.cash + '<span><b>Cash on Delivery</b><br><small>Pay when your order arrives</small></span></label>' : '') +
-      (s.payBank ? '<label class="pay-opt"><input type="radio" name="pay" value="Bank Transfer" required>' + I.shield + '<span><b>Bank Transfer</b><br><small>Bank details are shown after you place the order</small></span></label>' : '') + '</div>' +
+      (bankReady() ? '<label class="pay-opt"><input type="radio" name="pay" value="Bank Transfer" required>' + I.shield + '<span><b>Bank Transfer</b><br><small>Bank details are shown after you place the order</small></span></label>' : '') + '</div>' +
       '<button class="btn lg full" id="placeBtn" style="grid-column:1/-1" disabled>Checking prices…</button></form>' +
       '<aside class="panel summary"><h3>Your order</h3><div id="sumLines"></div>' +
       '<div class="sum-row" style="border-top:1px solid var(--line);margin-top:6px;padding-top:10px"><span>Subtotal</span><span id="sumSub">…</span></div>' +
@@ -1082,12 +1084,14 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
       e.preventDefault(); e.stopPropagation();
       var d = info(cur);
       if (b.dataset.a === 'edit') send({ type: 'scg-edit', ed: d.ed, id: d.id, i: d.i, page: location.hash });
-      if (b.dataset.a === 'photo') { file.dataset.ed = d.ed; file.dataset.id = d.id; file.dataset.i = d.i; file.value = ''; file.click(); }
+      if (b.dataset.a === 'photo') { file.dataset.ed = d.ed; file.dataset.id = d.id; file.dataset.i = d.i; file.dataset.poster = cur.classList.contains('pst') ? '1' : ''; file.value = ''; file.click(); }
     });
     file.addEventListener('change', function () {
       var f = file.files[0]; if (!f) return;
       toast('Processing photo…');
-      SCG.imageToDataURL(f, 800).then(function (url) { send({ type: 'scg-photo', ed: file.dataset.ed, id: file.dataset.id, i: +file.dataset.i, url: url }); })
+      // a poster keeps up to 1920 px (its words must stay sharp), a product photo 1600 px, small pictures 900 px
+      var big = file.dataset.poster ? [1920, 0.9] : file.dataset.ed === 'product' ? [1600, 0.85] : [900, 0.8];
+      SCG.imageToDataURL(f, big[0], big[1]).then(function (url) { send({ type: 'scg-photo', ed: file.dataset.ed, id: file.dataset.id, i: +file.dataset.i, url: url }); })
         .catch(function () { toast('That file could not be read as an image'); });
     });
     // tell the admin which page the preview is showing

@@ -173,7 +173,8 @@
         if (!op[p.id]) {
           steps.push(function () {
             var body = productBody(p);
-            if (p.stockBySize) body.stockBySize = p.stockBySize; else body.stock = Math.max(0, Math.floor(+p.stock || 0));
+            // per-size stock is sent once, with the new product; it must not stay on the product (a later save would re-send it and undo sales)
+            if (p.stockBySize) { body.stockBySize = p.stockBySize; delete p.stockBySize; } else body.stock = Math.max(0, Math.floor(+p.stock || 0));
             return api('POST', '/admin/products', body).then(function (saved) { renameProduct(cur, p.id, saved.id); merge(p, saved); });
           });
           return;

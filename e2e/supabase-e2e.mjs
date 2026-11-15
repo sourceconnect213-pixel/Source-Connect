@@ -247,6 +247,34 @@ for (const [vw, vh] of [[1366, 860], [390, 844]]) {
 }
 sql(`DELETE FROM app.banners WHERE title = 'E2E 11:11 Offer'`);
 
+// 6f. a new product with sizes: the admin asks for the stock of each size; the website follows it per size
+await ap.goto(SITE + '/admin/#products/new'); await ap.waitForSelector('#pform', { timeout: 15000 });
+await ap.fill('#pform [name=name]', 'E2E Size Stock Tee'); await ap.fill('#pform [name=price]', '1900'); await ap.fill('#pform [name=sizes]', 'S, M, L');
+check('new product form asks for the stock of each size', (await ap.$$('#pform input[data-nsize]')).length === 3 && await ap.isHidden('#pform [name=stock]'));
+await ap.fill('#pform input[data-nsize="S"]', '0'); await ap.fill('#pform input[data-nsize="M"]', '4'); await ap.fill('#pform input[data-nsize="L"]', '2');
+check('the form shows the total of the sizes', /Total: 6/.test(await ap.textContent('#newStockSum')));
+await ap.click('#pform button.primary');
+await ap.waitForFunction(() => !SCG.syncing(), null, { timeout: 25000 }); await ap.waitForTimeout(800);
+const sizeSlug = sql(`SELECT slug FROM app.products WHERE name = 'E2E Size Stock Tee'`);
+const sizeStock = sql(`SELECT string_agg(v.size || '=' || i.on_hand, ',' ORDER BY v.sort_order) FROM app.product_variants v JOIN app.inventory i ON i.variant_id = v.id JOIN app.products p ON p.id = v.product_id WHERE p.slug = '${sizeSlug}'`);
+check('each size is saved with its own stock', sizeStock === 'S=0,M=4,L=2', sizeStock);
+const zc = await ctx({ viewport: { width: 400, height: 860 } }); const zp = await page(zc, 'shop-sizes');
+await zp.goto(withSb('#p/' + sizeSlug)); await zp.waitForSelector('#sz', { timeout: 20000 }); await zp.waitForTimeout(600);
+const pdp = await zp.evaluate(() => ({ on: document.querySelector('#sz button.on')?.textContent, out: [...document.querySelectorAll('#sz button')].filter(b => b.disabled).map(b => b.textContent).join(','), avail: document.querySelector('#avail').textContent, buyOff: document.querySelector('#buyNow').disabled }));
+check('product page starts on a size that is in stock; sold-out sizes cannot be picked', pdp.on === 'M' && pdp.out === 'S' && !pdp.buyOff, JSON.stringify(pdp));
+check('product page shows what is left in the chosen size', pdp.avail === '4 available in size M', pdp.avail);
+for (let i = 0; i < 8; i++) await zp.click('[data-q="1"]');
+check('quantity stops at the stock of the chosen size', (await zp.textContent('#qv')) === '4');
+await zp.click('#sz button[data-s="L"]'); await zp.waitForTimeout(200);
+check('changing size updates the note and lowers the quantity', (await zp.textContent('#avail')) === '2 available in size L' && (await zp.textContent('#qv')) === '2');
+await zp.evaluate(id => SCG.saveCart([{ id, size: 'S', qty: 1, sel: true }, { id, size: 'L', qty: 2, sel: true }]), sizeSlug);
+await zp.goto(withSb('#cart')); await zp.waitForSelector('.cart-row .qty', { timeout: 15000 }); await zp.waitForTimeout(500);
+check('cart warns about the sold-out size only', (await zp.$$eval('.stock-warn', l => l.map(e => e.textContent).join('|'))) === 'Size S is out of stock. Please remove it.');
+await zp.click('.cart-row:has-text("Size: L") [data-cq="1"]'); await zp.waitForTimeout(400);
+check('cart + button stops at the stock of that size', /Only 2 in stock in size L/.test(await zp.textContent('#toast')) && (await zp.evaluate(() => SCG.getCart().find(l => l.size === 'L').qty)) === 2);
+await zc.close();
+sql(`UPDATE app.products SET status = 'archived' WHERE slug = '${sizeSlug}'`);
+
 // 7. customer account (Supabase Auth)
 const acc = await ctx(); const cp = await page(acc, 'customer');
 await cp.goto(withSb('#account')); await cp.waitForSelector('#regF', { timeout: 20000 });

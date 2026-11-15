@@ -555,7 +555,7 @@
       var files = Array.prototype.slice.call(e.target.files, 0, Math.max(0, 8 - d.images.length));
       if (!files.length) { toast('Up to 8 photos per product'); return; }
       toast('Processing ' + files.length + ' photo(s)…');
-      Promise.all(files.map(function (fl) { return SCG.imageToDataURL(fl, 800).catch(function () { return null; }); })).then(function (urls) {
+      Promise.all(files.map(function (fl) { return SCG.imageToDataURL(fl, SCG.API ? 1600 : 800, SCG.API ? 0.85 : undefined).catch(function () { return null; }); })).then(function (urls) {
         var ok = urls.filter(Boolean); d.images = d.images.concat(ok); drawGal();
         toast(ok.length + ' photo(s) added' + (ok.length < urls.length ? ', some could not be read' : ''));
         e.target.value = '';
@@ -587,6 +587,7 @@
         description: E.description.value.trim(), featured: E.featured.checked, flash: E.flash.checked
       });
       out.images = d.images.slice(0, 8); out.image = out.images[0] || '';
+      if (isNew && f._newStock) out.stockBySize = f._newStock;   // stock for each size of a new product (server mode)
       if (isNew) { out.id = SCG.uid(out.category); out.createdAt = Date.now(); db.products.unshift(out); }
       else db.products[db.products.indexOf(p)] = out;
       if (!commit(isNew ? 'Product added' : 'Product updated')) return;
@@ -747,7 +748,7 @@
         '<label class="full">Name<input name="name" required value="' + esc(c.name) + '"></label>' +
         '<label class="full">Description<textarea name="description" rows="2">' + esc(c.description || '') + '</textarea></label>' +
         '<label>Colour<input type="color" name="accent" value="' + esc(c.accent || '#0b2a6f') + '"></label>' +
-        '<div class="uploader" id="cCover"><div class="preview" style="width:120px;height:80px">' + (c.image ? '<img src="' + SCG.imgSrc(c.image) + '" alt="">' : '<span class="hint">No cover</span>') + '</div><div class="btns"><input type="file" accept="image/*" aria-label="Upload a picture"><button type="button" class="btn sm danger" data-rm-img>Remove cover</button></div></div>' +
+        '<div class="uploader" id="cCover"><div class="preview" style="width:120px;height:80px">' + (c.image ? '<img src="' + SCG.imgSrc(c.image) + '" alt="">' : '<span class="hint">No picture</span>') + '</div><div class="btns"><small class="muted">Picture shown whole beside the title</small><input type="file" accept="image/*" aria-label="Upload a picture"><button type="button" class="btn sm danger" data-rm-img>Remove picture</button></div></div>' +
         '<div class="full" style="display:flex;gap:18px;flex-wrap:wrap">' + sw('nav', inNav(), 'Show in header menu') + sw('home', !!c.homeRow, 'Show as a row on the homepage') + '</div>' +
         '<div class="form-foot"><button class="btn primary">Save details</button></div></div></form>' +
       '<div class="panel"><h3>Fill quickly <small>add every product that matches</small></h3><div class="form" style="grid-template-columns:1fr">' +
@@ -766,7 +767,7 @@
 
     // ---- details form
     var cover = c.image || '';
-    bindUploader($('#cCover'), function () { return '<span class="hint">No cover</span>'; }, function (u) { cover = u; });
+    bindUploader($('#cCover'), function () { return '<span class="hint">No picture</span>'; }, function (u) { cover = u; });
     $('#cInfo').onsubmit = function (e) {
       e.preventDefault(); var E = e.target.elements;
       c.name = E.name.value.trim() || c.name; c.description = E.description.value.trim(); c.accent = E.accent.value; c.image = cover; c.homeRow = E.home.checked;
@@ -1478,8 +1479,37 @@
           det.map(function (v) { return '<label style="font-size:12px">' + esc(v.size || 'One size') + (v.reserved ? ' <small class="muted">(' + v.reserved + ' reserved)</small>' : '') + '<input type="number" min="' + v.reserved + '" data-size="' + esc(v.size) + '" value="' + v.onHand + '"' + (can('inventory.adjust') ? '' : ' readonly') + '></label>'; }).join('') +
           '</div><small class="muted">New sizes start at 0 — set their stock after saving.</small></div>');
         f.addEventListener('submit', function () {
+          if (!f.elements.name.value.trim()) return;   // the form will refuse to save without a name: do not queue stock for a save that does not happen
           var m = {}, total = 0; $$('input[data-size]', f).forEach(function (i) { m[i.dataset.size] = Math.max(0, Math.floor(+i.value || 0)); total += m[i.dataset.size]; });
           st.value = total; SCG.pendingStock = SCG.pendingStock || {}; SCG.pendingStock[p.id] = m;
+        }, true);
+      }
+      // NEW product with several sizes: ask for the stock of EACH size. (One total would all go to the first size,
+      // leaving the other sizes sold out on the website.)
+      if (!p && st && can('inventory.adjust')) {
+        var lab0 = st.closest('label'), szIn = f.elements.sizes, typed = {};
+        lab0.insertAdjacentHTML('afterend', '<div class="full" id="newStock" hidden></div>');
+        var box = $('#newStock');
+        var sizesNow = function () { var seen = {}; return szIn.value.split(',').map(function (x) { return x.trim(); }).filter(function (x) { if (!x || seen[x]) return false; seen[x] = 1; return true; }); };
+        var sumStock = function () { var t = 0; $$('input[data-nsize]', box).forEach(function (i) { t += Math.max(0, Math.floor(+i.value || 0)); }); var el = $('#newStockSum'); if (el) el.textContent = 'Total: ' + t; return t; };
+        var drawStock = function () {
+          $$('input[data-nsize]', box).forEach(function (i) { typed[i.dataset.nsize] = i.value; });
+          var sz = sizesNow();
+          if (sz.length < 2) { box.hidden = true; box.innerHTML = ''; lab0.hidden = false; return; }
+          lab0.hidden = true; box.hidden = false;
+          box.innerHTML = '<b style="font-size:13px">Stock for each size</b> <small class="muted">(how many you have of each size; type 0 if none)</small>' +
+            '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin-top:6px">' +
+            sz.map(function (z) { return '<label style="font-size:12px">' + esc(z) + '<input type="number" min="0" max="1000000" step="1" inputmode="numeric" required placeholder="0" data-nsize="' + esc(z) + '" value="' + esc(typed[z] === undefined ? '' : typed[z]) + '"></label>'; }).join('') +
+            '</div><small class="muted" id="newStockSum"></small>';
+          sumStock();
+        };
+        szIn.addEventListener('input', drawStock); box.addEventListener('input', sumStock);
+        drawStock();
+        f.addEventListener('submit', function () {
+          f._newStock = null;
+          if (box.hidden) return;
+          var m = {}; $$('input[data-nsize]', box).forEach(function (i) { m[i.dataset.nsize] = Math.max(0, Math.floor(+i.value || 0)); });
+          st.value = sumStock(); f._newStock = m;
         }, true);
       }
     };

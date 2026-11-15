@@ -39,6 +39,8 @@
     var m = d && (d.msg || d.message || d.error_description) || '';
     if (/invalid login credentials/i.test(m)) return 'Incorrect email or password.';
     if (/already (been )?registered|already exists/i.test(m)) return 'An account with this email already exists. Please sign in.';
+    // Supabase refuses passwords found in known data leaks (leaked-password protection)
+    if (((d && d.weak_password && d.weak_password.reasons) || []).indexOf('pwned') > -1 || /known to be weak|easy to guess|pwned|data breach/i.test(m)) return 'That password has appeared in a known data leak, so it is not safe. Please choose a different one.';
     if (/password/i.test(m) && status === 422) return 'Use at least 12 characters with letters and numbers.';
     if (status === 429) return 'Too many tries. Please wait a few minutes.';
     return m || 'Request failed (' + status + ')';
