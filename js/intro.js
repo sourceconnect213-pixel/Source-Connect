@@ -27,7 +27,7 @@
     opts = opts || {};
     var w = opts.welcome || {}, done = opts.onDone || function () {};
     var root = document.documentElement;
-    if (!shouldShow(w)) { root.classList.remove('intro-on'); done(false); return; }
+    if (!shouldShow(w)) { root.classList.remove('intro-on', 'intro-wait'); done(false); return; }
     var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     var codes = (opts.origins || []).filter(function (o) { return o.on; }).map(function (o) { return o.code; });
     var sub = String(w.subtitle || '');
@@ -51,7 +51,7 @@
       '<div class="in-bar t"></div><div class="in-bar b"></div>' +
       '<button class="in-skip" type="button">Skip intro</button>';
     document.body.appendChild(el);
-    root.classList.add('intro-on');
+    root.classList.add('intro-on'); root.classList.remove('intro-wait');   // the intro itself is on screen now: the "loading" ring goes
 
     var globe = null;
     if (global.SCGGlobe && !reduce) {

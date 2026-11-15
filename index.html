@@ -21,8 +21,10 @@
         var w = (d && d.settings && d.settings.welcome) || { on: true, mode: 'session' };
         var seen = w.mode === 'first' ? localStorage.getItem('scg_intro_seen') : sessionStorage.getItem('scg_intro_seen');
         if (force || (w.on !== false && w.mode !== 'off' && (w.mode === 'visit' || !seen))) {
-          document.documentElement.classList.add('intro-on');
+          document.documentElement.classList.add('intro-on', 'intro-wait');
           var l = document.createElement('link'); l.rel = 'preload'; l.as = 'image'; l.href = 'assets/intro-emblem.webp?v=1'; document.head.appendChild(l);
+          /* Safety net: if the shop cannot start (no connection, server down), never leave the visitor on the dark cover. */
+          setTimeout(function () { if (!document.querySelector('.intro')) document.documentElement.classList.remove('intro-on', 'intro-wait'); }, 15000);
         }
       } catch (e) {}
     })();
@@ -92,7 +94,7 @@
   </aside>
   <div class="scrim" id="scrim"></div>
 
-  <main id="app"></main>
+  <main id="app"><div class="loader" role="status" style="padding:60px 16px"><span class="spinner"></span>Loading the shop…</div></main>
 
   <!-- Footer -->
   <footer class="footer" data-ed="settings">

@@ -93,6 +93,9 @@ jobs:
             code=$(curl -s -o /dev/null -w '%{http_code}' "https://source-connect-915.pages.dev$p"); echo "$code $p"; [ "$code" = 200 ]
           done
           curl -s https://source-connect-915.pages.dev/js/config.js | grep -q nuqmaiybqmuvtfnjdzvn.supabase.co
+          # the staging address must stay out of search engines (deploy/_headers)
+          HDRS=$(curl -sI https://source-connect-915.pages.dev/); echo "$HDRS" | grep -i '^x-robots-tag' || true
+          grep -i '^x-robots-tag:.*noindex' <<<"$HDRS" >/dev/null
       - name: No Cloudflare token yet
         if: env.CLOUDFLARE_API_TOKEN == ''
         run: echo "::notice::Add the repository secret CLOUDFLARE_API_TOKEN to deploy the staging site."

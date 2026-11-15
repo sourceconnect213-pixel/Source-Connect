@@ -468,7 +468,7 @@
   }
 
   function productVisual(p, color) {
-    if (p.image) return '<img src="' + imgSrc(p.image) + '" alt="' + escapeHTML(p.name) + '" loading="lazy">';
+    if (p.image) return '<img src="' + imgSrc(p.image) + '" alt="' + escapeHTML(p.name) + '" data-pid="' + escapeHTML(p.id) + '" loading="lazy">';
     var cat = categoryById(p.category);
     return productSVG(p.shape || (cat ? cat.shape : 'tshirt'), color || p.color, p.pattern, p.accent);
   }
@@ -538,6 +538,21 @@
       reader.readAsDataURL(file);
     });
   }
+
+  /* A picture that cannot be loaded (file removed, weak connection) never shows the browser's "broken picture" mark:
+     a product photo turns into the drawn product, anything else is hidden so the tinted box behind it shows. */
+  if (global.document) global.document.addEventListener('error', function (e) {
+    var img = e.target;
+    if (!img || img.tagName !== 'IMG' || img.getAttribute('data-fb')) return;
+    img.setAttribute('data-fb', '1');
+    var pid = img.getAttribute('data-pid'), p = pid ? productById(pid) : null;
+    if (p) {
+      var cat = categoryById(p.category), box = global.document.createElement('div');
+      box.innerHTML = productSVG(p.shape || (cat ? cat.shape : 'tshirt'), p.color, p.pattern, p.accent);
+      if (box.firstChild) { img.replaceWith(box.firstChild); return; }
+    }
+    img.style.visibility = 'hidden';
+  }, true);
 
   global.SCG = {
     SHAPES: SHAPES, PATTERNS: PATTERNS,

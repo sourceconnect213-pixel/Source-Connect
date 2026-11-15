@@ -37,6 +37,16 @@
   }
   function authMessage(d, status) {
     var m = d && (d.msg || d.message || d.error_description) || '';
+    var code = d && (d.error_code || (typeof d.code === 'string' ? d.code : '')) || '';
+    // plain words for the Auth error codes a visitor can run into (codes as documented by Supabase)
+    if (code === 'email_address_not_authorized') return 'Sorry, we cannot send emails to this address yet, so this step is not open at the moment. You can still order without an account.';
+    if (code === 'email_not_confirmed') return 'Please confirm your email first: open the link in the message we sent you.';
+    if (code === 'over_email_send_rate_limit') return 'We have just sent too many emails. Please wait a few minutes and try again.';
+    if (code === 'email_address_invalid') return 'That email address does not look right. Please check it.';
+    if (code === 'same_password') return 'Your new password must be different from the old one.';
+    if (code === 'signup_disabled') return 'New accounts are not open at the moment. You can still order without an account.';
+    if (code === 'user_banned') return 'This account is blocked. Please contact us.';
+    if (code === 'otp_expired') return 'That link has expired. Please ask for a new one.';
     if (/invalid login credentials/i.test(m)) return 'Incorrect email or password.';
     if (/already (been )?registered|already exists/i.test(m)) return 'An account with this email already exists. Please sign in.';
     // Supabase refuses passwords found in known data leaks (leaked-password protection)
@@ -61,10 +71,21 @@
   }
 
   // ---------- database functions and Edge Functions ----------
-  function rpc(fn, args, kind) {
+  // `ms` (only for READS that are safe to repeat): give up after this long instead of waiting for ever on a connection that never answers
+  function rpc(fn, args, kind, ms) {
+    var ctl = ms && global.AbortController ? new global.AbortController() : null, timer = ctl ? setTimeout(function () { ctl.abort(); }, ms) : 0;
+    var p = rpcCall(fn, args, kind, ctl);
+    if (!timer) return p;
+    return p.then(function (d) { clearTimeout(timer); return d; }, function (e) {
+      clearTimeout(timer);
+      if (e && e.status !== undefined) throw e;
+      throw err(0, 'network', 'Cannot reach the shop server. Check your internet connection and try again.');   // stopped while the answer was arriving
+    });
+  }
+  function rpcCall(fn, args, kind, ctl) {
     return (kind ? token(kind) : Promise.resolve(null)).then(function (t) {
       return fetch(URL_ + '/rest/v1/rpc/' + fn, {
-        method: 'POST', cache: 'no-store',
+        method: 'POST', cache: 'no-store', signal: ctl ? ctl.signal : undefined,
         headers: { apikey: ANON, authorization: 'Bearer ' + (t || ANON), 'content-type': 'application/json' },
         body: JSON.stringify(args || {})
       });
@@ -137,8 +158,8 @@
     opts = opts || {};
     var x, qs = q(path);
     // ---- storefront ----
-    if (path === '/storefront') return rpc('storefront_snapshot');
-    if (path === '/cart/quote') return rpc('quote_cart', { p_items: body.items, p_coupon: body.coupon || null });
+    if (path === '/storefront') return rpc('storefront_snapshot', null, null, 30000);
+    if (path === '/cart/quote') return rpc('quote_cart', { p_items: body.items, p_coupon: body.coupon || null }, null, 30000);
     if (path === '/orders') return edge('checkout', body, load('customer') ? 'customer' : null, opts.idempotencyKey ? { 'idempotency-key': opts.idempotencyKey } : {});
     if (path === '/orders/track') return edge('track-order', body);
     if (path === '/account/orders') return rpc('my_orders', {}, 'customer');
@@ -225,6 +246,13 @@
   // Links from Supabase Auth emails land on the website with a session in the address (#access_token=...&type=...)
   function takeAuthRedirect() {
     var h = location.hash;
+    // a link that has expired or was already used comes back with an error instead of a session: say so on the account page
+    if (/(^#|&)error(_code|_description)?=/.test(h) && !/access_token=/.test(h)) {
+      var q0 = new URLSearchParams(h.replace(/^#/, ''));
+      global.SCG_AUTH_NOTICE = q0.get('error_code') === 'otp_expired' ? 'That link has expired or was already used. Please ask for a new one.' : (q0.get('error_description') || 'That link did not work. Please ask for a new one.');
+      history.replaceState(null, '', location.pathname + location.search + '#account');
+      return 'error';
+    }
     if (!/access_token=/.test(h)) return null;
     var p = new URLSearchParams(h.replace(/^#/, ''));
     var s = { access_token: p.get('access_token'), refresh_token: p.get('refresh_token'), expires_in: +(p.get('expires_in') || 3600) };

@@ -518,7 +518,7 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
     }
     tab('d');
     $('#ptabs').onclick = function (e) { var b = e.target.closest('button'); if (b) tab(b.dataset.t); };
-    $('#thumbs').addEventListener('click', function (e) { var b = e.target.closest('[data-img]'); if (!b) return; $('#big').innerHTML = '<img src="' + SCG.imgSrc(imgs[+b.dataset.img]) + '" alt="' + esc(p.name) + '">'; $$('#thumbs button').forEach(function (x) { x.classList.toggle('on', x === b); }); });
+    $('#thumbs').addEventListener('click', function (e) { var b = e.target.closest('[data-img]'); if (!b) return; $('#big').innerHTML = '<img src="' + SCG.imgSrc(imgs[+b.dataset.img]) + '" alt="' + esc(p.name) + '" data-pid="' + esc(p.id) + '">'; $$('#thumbs button').forEach(function (x) { x.classList.toggle('on', x === b); }); });
     function pick(c) { st.color = c; $('#big').innerHTML = visual(p, c); ['#thumbs', '#sw'].forEach(function (s) { if ($(s)) $$('button', $(s)).forEach(function (b) { b.classList.toggle('on', b.dataset.c === c); }); }); }
     // colour buttons only (photo thumbnails have their own handler above)
     ['#thumbs', '#sw'].forEach(function (s) { if ($(s)) $(s).onclick = function (e) { var b = e.target.closest('button[data-c]'); if (b) pick(b.dataset.c); }; });
@@ -859,6 +859,7 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
       $('#loginF').onsubmit = function (e) { e.preventDefault(); var E = e.target.elements; SCG.customerAuth('login', { email: E.email.value.trim(), password: E.password.value }).then(done, function (err) { $('#loginMsg').textContent = err.message; }); };
       $('#regF').onsubmit = function (e) { e.preventDefault(); var E = e.target.elements; SCG.customerAuth('register', { name: E.name.value.trim(), email: E.email.value.trim(), phone: E.phone.value.trim(), password: E.password.value }).then(done, function (err) { $('#regMsg').textContent = err.message; }); };
       $('#forgot').onclick = function () { var em = $('#loginF').elements.email.value.trim(); if (!em) { $('#loginMsg').textContent = 'Type your email above first.'; return; } SCG.api('POST', '/customers/password-reset/request', { email: em }).then(function () { $('#loginMsg').style.color = 'var(--green, #0a7d3c)'; $('#loginMsg').textContent = 'If that email has an account, we sent a reset link.'; }, function (err) { $('#loginMsg').textContent = err.message; }); };
+      if (window.SCG_AUTH_NOTICE) { $('#loginMsg').textContent = window.SCG_AUTH_NOTICE; window.SCG_AUTH_NOTICE = null; }   // e.g. an email link that has expired
       return;
     }
     app.innerHTML = '<div class="wrap"><div class="crumbs"><a href="#">Home</a>›<span>My account</span></div><div class="panel acct-head">' + avatar(me) + '<div><h2>Hello, ' + esc(me.name.split(' ')[0]) + '</h2><small>' + esc(me.email || '') + (me.verified ? ' · email confirmed' : ' · please confirm your email (check your inbox)') + '</small></div></div>' +
