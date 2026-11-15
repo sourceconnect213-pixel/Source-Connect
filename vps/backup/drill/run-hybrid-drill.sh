@@ -23,7 +23,7 @@ j() { python3 -c 'import json,sys; print(json.loads(sys.argv[1])[sys.argv[2]])' 
 API=$(j API_URL); SERVICE=$(j SERVICE_ROLE_KEY); ANON=$(j ANON_KEY)
 
 step "0. versions"
-{ docker run --rm "$IMG" pg_dump --version; psql --version; age --version; rclone version | head -1; node --version; } | log
+{ docker run --rm "$IMG" pg_dump --version; psql --version; age --version; rclone version | sed -n 1p; node --version; } | log
 
 step "1. local stand-in for Cloudflare R2 (s3rver, HTTPS with its own certificate)"
 openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" \
@@ -90,7 +90,7 @@ PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -XAtqc "ALTER ROLE sc
 step "4. real shop activity: 3 orders through the checkout Edge Function + a product photo upload"
 ORDERS=()
 for slug in kids-1 kids-2 womens-1; do
-  size=$(PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -XAtc "UPDATE app.inventory i SET on_hand = 5, reserved = 0 FROM app.product_variants v JOIN app.products p ON p.id = v.product_id WHERE v.id = i.variant_id AND p.slug = '$slug' AND v.sort_order = (SELECT min(sort_order) FROM app.product_variants WHERE product_id = p.id) RETURNING v.size" | head -1)
+  size=$(PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -XAtc "UPDATE app.inventory i SET on_hand = 5, reserved = 0 FROM app.product_variants v JOIN app.products p ON p.id = v.product_id WHERE v.id = i.variant_id AND p.slug = '$slug' AND v.sort_order = (SELECT min(sort_order) FROM app.product_variants WHERE product_id = p.id) RETURNING v.size" | sed -n 1p)
   r=$(curl -fsS "$API/functions/v1/checkout" -H "apikey: $ANON" -H "authorization: Bearer $ANON" -H 'content-type: application/json' \
       -d "{\"items\":[{\"id\":\"$slug\",\"size\":\"$size\",\"qty\":1}],\"customer\":{\"name\":\"Drill Buyer\",\"phone\":\"0771234567\",\"email\":\"drill-buyer@example.com\",\"address\":\"1 Drill Road\",\"city\":\"Galle\",\"district\":\"Galle\"},\"payment\":\"cod\"}")
   n=$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["orderNumber"])' "$r"); ORDERS+=("$n"); echo "order $n placed" | log
@@ -117,27 +117,32 @@ echo "manifest counts recorded before the dump; age header: $(head -c 21 "$OUT")
 step "6. photo backup (sc-storage-backup.sh)"
 bash "$B/sc-storage-backup.sh" 2>&1 | log
 echo "objects on R2 under files/ (names are encrypted):" | log
-rclone lsf -R r2:sc-backups/files | head -5 | log
-if rclone lsf -R r2:sc-backups/files | grep -q "product-images\|\.png"; then echo "PLAIN NAMES FOUND on R2" | log; exit 1; fi
-echo "no readable file names on R2: ok" | log
+# (the whole listing is read first: a reader that stops early, like `head`, would kill rclone with SIGPIPE under pipefail)
+R2LIST=$(rclone lsf -R r2:sc-backups/files)
+[ -n "$R2LIST" ] || { echo "NOTHING was uploaded to R2" | log; exit 1; }
+printf '%s\n' "$R2LIST" | sed -n '1,5p' | log
+if grep "product-images\|\.png" <<<"$R2LIST" >/dev/null; then echo "PLAIN NAMES FOUND on R2" | log; exit 1; fi
+echo "no readable file names on R2: ok ($(printf '%s\n' "$R2LIST" | wc -l) entries)" | log
 
 step "7. restore drill from R2 (sc-restore-drill.sh)"
 bash "$B/sc-restore-drill.sh" 2>&1 | log
-EVIDENCE=$(ls -t "$WORK"/backups/drills/drill-*.json | head -1)
+EVIDENCE=$(ls -t "$WORK"/backups/drills/drill-*.json | sed -n 1p)
 python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(json.dumps({k: d[k] for k in ["backup","verify_sql","restore_seconds","total_seconds","restored_counts"]}, indent=1))' "$EVIDENCE" | log
 
 step "8. the orders placed in step 4 are inside the restored backup"
 # restore into a second scratch to look inside (the drill script already removed its own container)
 age --decrypt -i "$WORK/etc/owner-offline.key" "$OUT" | tar -C "$WORK" -xf - db.pgc manifest.json
 echo "the OWNER'S OFFLINE KEY also decrypts the backup: ok" | log
+RESTORED_ORDERS=$(docker run --rm -i "$IMG" sh -c 'cat > /tmp/d && pg_restore -a -t orders -f - /tmp/d' < "$WORK/db.pgc")
 for n in "${ORDERS[@]}"; do
-  docker run --rm -i "$IMG" sh -c 'cat > /tmp/d && pg_restore -a -t orders -f - /tmp/d' < "$WORK/db.pgc" | grep -q "$n" && echo "order $n found in backup" | log
+  # a missing order FAILS the drill (it used to be skipped silently)
+  if grep "$n" <<<"$RESTORED_ORDERS" >/dev/null; then echo "order $n found in backup" | log; else echo "ORDER $n IS MISSING from the backup" | log; exit 1; fi
 done
 
 step "9. photo restore: R2 -> folder, bytes identical to the original"
 rclone copy --fast-list "r2crypt:storage/product-images" "$WORK/photo-restore" 2>&1 | log
 a=$(sha256sum "$WORK/photo.png" | cut -d' ' -f1); b=$(sha256sum "$WORK/photo-restore/$PHOTO" | cut -d' ' -f1)
-[ "$a" = "$b" ] && echo "restored photo sha256 $b matches the original: ok" | log
+if [ -n "$a" ] && [ "$a" = "$b" ]; then echo "restored photo sha256 $b matches the original: ok" | log; else echo "RESTORED PHOTO DIFFERS from the original ($a vs $b)" | log; exit 1; fi
 
 step "10. safety checks: tampered backup, wrong key, deleted photo"
 cp "$OUT" "$WORK/tampered.tar.age"; cp "$OUT.sha256" "$WORK/tampered.tar.age.sha256"
@@ -152,7 +157,8 @@ expect_fail age --decrypt -i "$WORK/stranger.key" -o /dev/null "$OUT"
 echo "-- photo deleted on the website is still in the backups:" | log
 curl -fsS -X DELETE "$API/storage/v1/object/product-images/$PHOTO" -H "apikey: $SERVICE" -H "authorization: Bearer $SERVICE" >/dev/null
 bash "$B/sc-storage-backup.sh" 2>>"$LOG"
-rclone lsf "r2crypt:storage/product-images/$(dirname "$PHOTO")" | grep -q "$(basename "$PHOTO")" && echo "deleted photo still on R2: ok" | log
+R2PHOTOS=$(rclone lsf "r2crypt:storage/product-images/$(dirname "$PHOTO")")
+if grep "$(basename "$PHOTO")" <<<"$R2PHOTOS" >/dev/null; then echo "deleted photo still on R2: ok" | log; else echo "DELETED PHOTO IS GONE from R2 (backups must keep it)" | log; exit 1; fi
 
 step "11. what the owner sees on the admin Backups page"
 PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -XAtc "SELECT jsonb_pretty(app.backup_health() - 'latest')" | log

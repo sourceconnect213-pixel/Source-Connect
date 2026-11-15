@@ -42,7 +42,7 @@ ufw default deny incoming; ufw default allow outgoing; ufw allow OpenSSH; ufw --
 printf '[sshd]\nenabled = true\nmaxretry = 5\nbantime = 1h\n' > /etc/fail2ban/jail.d/sshd.local
 systemctl enable --now fail2ban
 dpkg-reconfigure -f noninteractive unattended-upgrades
-if ! swapon --show | grep -q /swapfile; then fallocate -l 2G /swapfile; chmod 600 /swapfile; mkswap /swapfile; swapon /swapfile; echo '/swapfile none swap sw 0 0' >> /etc/fstab; fi
+if ! swapon --show | grep /swapfile >/dev/null; then fallocate -l 2G /swapfile; chmod 600 /swapfile; mkswap /swapfile; swapon /swapfile; echo '/swapfile none swap sw 0 0' >> /etc/fstab; fi
 mkdir -p /etc/systemd/journald.conf.d && printf '[Journal]\nSystemMaxUse=500M\n' > /etc/systemd/journald.conf.d/size.conf && systemctl restart systemd-journald
 
 echo "== code, users, folders"

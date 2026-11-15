@@ -50,7 +50,7 @@ systemctl enable --now fail2ban
 dpkg-reconfigure -f noninteractive unattended-upgrades
 
 echo "== swap (2 GB) so a memory spike does not kill PostgreSQL"
-if ! swapon --show | grep -q /swapfile; then fallocate -l 2G /swapfile; chmod 600 /swapfile; mkswap /swapfile; swapon /swapfile; echo '/swapfile none swap sw 0 0' >> /etc/fstab; fi
+if ! swapon --show | grep /swapfile >/dev/null; then fallocate -l 2G /swapfile; chmod 600 /swapfile; mkswap /swapfile; swapon /swapfile; echo '/swapfile none swap sw 0 0' >> /etc/fstab; fi
 sysctl -w vm.swappiness=10 >/dev/null; echo 'vm.swappiness=10' > /etc/sysctl.d/90-swappiness.conf
 
 echo "== PostgreSQL 16: localhost only, sized for 4 GB shared with the API"
@@ -70,7 +70,7 @@ log_lock_waits = on
 idle_in_transaction_session_timeout = 60s
 CONF
 systemctl restart postgresql
-if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='sc_app'" | grep -q 1; then
+if ! sudo -u postgres psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='sc_app'" | grep 1 >/dev/null; then
   DBPW=$(openssl rand -base64 30 | tr -d '/+=' | cut -c1-32)
   sudo -u postgres psql -qc "CREATE ROLE sc_app LOGIN PASSWORD '$DBPW'"
   sudo -u postgres psql -qc "CREATE DATABASE source_connect OWNER sc_app"

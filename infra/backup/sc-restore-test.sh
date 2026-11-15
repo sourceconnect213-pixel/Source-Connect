@@ -17,7 +17,8 @@ rm -rf "$DIR"; mkdir -p "$DIR"; chmod 700 "$DIR"
 #    NOTE: pgbackrest 2.50 `verify` exits 0 even when it finds bad files, so read its report instead of the exit code.
 if [ -z "$TARGET" ] && [ "${SKIP_VERIFY:-0}" != 1 ]; then
   VOUT=$($PGBR --stanza="$STANZA" --log-level-console=info verify 2>&1) || true
-  if echo "$VOUT" | grep -qiE "status: invalid|checksum invalid|missing"; then
+  # (here-string, not `echo | grep -q`: with pipefail an early-exiting reader can make this test fail silently)
+  if grep -iE "status: invalid|checksum invalid|missing" <<<"$VOUT" >/dev/null; then
     record restore_test failed "$START" "{\"step\": \"verify\", \"error\": $(echo "$VOUT" | grep -iE 'invalid|missing' | head -5 | json_escape)}"
     alert "Source Connect: BACKUP FILES DAMAGED" "$(echo "$VOUT" | grep -iE 'invalid|missing' | head -10)"; exit 1
   fi
