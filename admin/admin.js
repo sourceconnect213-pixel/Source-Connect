@@ -79,7 +79,7 @@
   function orders() { return SCG.getOrders(); }
   function updatePill() { var n = orders().filter(function (o) { return o.status === 'Pending'; }).length; $('#orderPill').textContent = n || ''; }
   function statusTag(s) { return '<span class="tag ' + ({ Pending: 'warn', Delivered: 'ok', Cancelled: 'red' }[s] || '') + '">' + esc(s) + '</span>'; }
-  function sw(name, on, label) { return '<label class="switch"><input type="checkbox" name="' + name + '"' + (on ? ' checked' : '') + '><i></i>' + (label || '') + '</label>'; }
+  function sw(name, on, label, aria) { return '<label class="switch"><input type="checkbox" name="' + name + '"' + (on ? ' checked' : '') + (!label && aria ? ' aria-label="' + esc(aria) + '"' : '') + '><i></i>' + (label || '') + '</label>'; }
   function originOptions(sel) {
     return SCG.origins().map(function (o) { return '<option value="' + o.id + '"' + (o.id === sel ? ' selected' : '') + '>' + esc(o.name) + (o.on ? '' : ' (off)') + '</option>'; }).join('') +
       '<option value="local"' + (!sel || sel === 'local' ? ' selected' : '') + '>Colombo stock</option>';
@@ -87,6 +87,8 @@
   function originName(id) { var o = SCG.originById(id); return o ? o.name : 'Colombo'; }
   function fmtBytes(b) { return b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.round(b / 1024) + ' KB'; }
   function storageMeter() {
+    // server mode: photos go to the shop's own storage when the product is saved; the browser's storage is not involved
+    if (SCG.API) return '<div class="meter"><small class="muted">Photos are saved on the shop server when you press Save. Large pictures are made smaller automatically.</small></div>';
     var used = SCG.storageUsed(), cap = 5 * 1048576, pct = Math.min(100, used / cap * 100);
     return '<div class="meter"><div><b>' + fmtBytes(used) + '</b> of about 5 MB browser storage used</div><div class="bar-track"><i style="width:' + pct + '%;' + (pct > 80 ? 'background:var(--red)' : '') + '"></i></div>' +
       (pct > 80 ? '<small style="color:var(--red)">Storage is nearly full. Use image links instead of uploads, or remove unused photos.</small>' : '<small class="muted">Uploaded photos are compressed. Image links (URLs) use almost no space.</small>') + '</div>';
@@ -172,6 +174,13 @@
     updatePill();
   }
   window.addEventListener('hashchange', route);
+  // Wide tables scroll sideways inside their own box: make that box reachable from the keyboard and name it for screen readers.
+  (function () {
+    var pending = false;
+    function mark() { pending = false; $$('.table-wrap:not([tabindex])').forEach(function (el) { el.tabIndex = 0; el.setAttribute('role', 'region'); el.setAttribute('aria-label', 'Table. Scroll sideways to see every column.'); }); }
+    new MutationObserver(function () { if (!pending) { pending = true; requestAnimationFrame(mark); } }).observe(document.body, { childList: true, subtree: true });
+    mark();
+  })();
 
   /* =========================================================
      LIVE PREVIEW PANEL + CLICK-TO-EDIT
@@ -218,14 +227,16 @@
     var px = w ? +w : Math.round((innerWidth - 250) * (full ? .72 : .5));
     px = Math.max(360, Math.min(px, innerWidth - 250 - (full ? 240 : 380)));
     document.documentElement.style.setProperty('--pvw', px + 'px');
+    pvAria(px);
     pvScale();
   }
+  function pvAria(px) { var sp = $('#pvSplit'); if (sp) sp.setAttribute('aria-valuenow', String(Math.max(0, Math.min(100, Math.round(px / Math.max(1, innerWidth) * 100))))); }
   (function () {
     var sp = $('#pvSplit'), drag = false;
     function move(x) {
       var full = $('#shell').classList.contains('pv-full');
       var px = Math.max(360, Math.min(innerWidth - x, innerWidth - 250 - (full ? 240 : 380)));
-      document.documentElement.style.setProperty('--pvw', px + 'px'); pvScale();
+      document.documentElement.style.setProperty('--pvw', px + 'px'); pvAria(px); pvScale();
       try { localStorage.setItem(pvWidthKey(), String(px)); } catch (e) {}
     }
     sp.addEventListener('pointerdown', function (e) { drag = true; sp.setPointerCapture(e.pointerId); document.body.classList.add('pv-dragging'); e.preventDefault(); });
@@ -253,6 +264,7 @@
     var visible = !!(has && (shell.classList.contains('pv-full') || (pvNarrow() ? pv.sheet : !pv.hidden)));
     shell.classList.toggle('has-pv', visible);
     $('#pv').hidden = !visible; $('#pvFab').hidden = !(has && !visible);
+    document.body.classList.toggle('has-pv-fab', has && !visible);
     document.body.classList.toggle('pv-on', visible); document.body.classList.toggle('pv-wide', visible && shell.classList.contains('pv-full'));
     if (visible) { pvGo(page); pvApplyWidth(); requestAnimationFrame(pvScale); }
   }
@@ -440,7 +452,7 @@
           '<td><input class="inline" type="number" min="0" data-f="price" value="' + p.price + '" aria-label="Price">' + (off ? '<br><small class="muted"><s>' + money(p.comparePrice) + '</s> -' + off + '%</small>' : '') + '</td>' +
           '<td><input class="inline" type="number" min="0" data-f="stock" value="' + p.stock + '" aria-label="Stock" style="width:64px' + (p.stock <= 5 ? ';border-color:#f59e0b' : '') + '"></td>' +
           '<td><select data-f="origin" aria-label="Ships from" style="width:auto;padding:6px">' + originOptions(p.origin) + '</select></td>' +
-          '<td>' + sw('flash', p.flash) + '</td>' +
+          '<td>' + sw('flash', p.flash, '', 'In Flash Sale: ' + p.name) + '</td>' +
           '<td><div class="actions"><a class="btn sm" target="_blank" rel="noopener" href="' + SITE + '#p/' + p.id + '" title="View on site">↗</a><button class="btn sm" data-edit>Edit</button><button class="btn sm" data-dup>Copy</button><button class="btn sm danger" data-del>Delete</button></div></td></tr>';
       }).join('') || '<tr><td colspan="8" class="muted" style="text-align:center;padding:40px">No products found.</td></tr>';
       bulkUI();
@@ -987,7 +999,7 @@
       '<div class="panel"><h3>Countries you import from <small>switch a country off to hide it on the site and the globe</small></h3>' +
       '<div class="table-wrap" style="border:0"><table><thead><tr><th>Show</th><th>Code</th><th>Country</th><th>Label on products</th><th>Delivery (days)</th><th>Products</th><th>Globe cities</th></tr></thead><tbody id="otb">' +
       list.map(function (o, i) {
-        return '<tr data-i="' + i + '"><td>' + sw('on', o.on) + '</td><td><input data-k="code" aria-label="Country code" value="' + esc(o.code) + '" style="width:60px" maxlength="3"></td>' +
+        return '<tr data-i="' + i + '"><td>' + sw('on', o.on, '', 'Show ' + (o.name || 'this country') + ' on the website') + '</td><td><input data-k="code" aria-label="Country code" value="' + esc(o.code) + '" style="width:60px" maxlength="3"></td>' +
           '<td><input data-k="name" aria-label="Country name" value="' + esc(o.name) + '" style="min-width:130px"></td><td><input data-k="label" aria-label="Label on products" value="' + esc(o.label) + '" style="min-width:140px"></td>' +
           '<td><input data-k="days" aria-label="Delivery days" value="' + esc(o.days) + '" style="width:90px"></td><td><a class="tag" href="#products" data-filter="' + o.id + '">' + count(o.id) + '</a></td>' +
           '<td><div class="checks">' + cities.filter(function (c) { return c.country === o.id; }).map(function (c) {
@@ -1315,6 +1327,8 @@
     var PAY = { pending: 'Payment pending', paid: 'Paid', cod_pending: 'COD – not collected', cod_collected: 'COD – cash collected', failed: 'Failed', cancelled: 'Cancelled', chargeback: 'CHARGEBACK', refunded: 'Refunded', partially_refunded: 'Partly refunded', unpaid: 'Unpaid' };
     var METHOD = { payhere: 'Card (PayHere)', cod: 'Cash on Delivery', bank_transfer: 'Bank transfer' };
     var FLOW = ['confirmed', 'processing', 'shipped', 'arrived_lk', 'delivered'];
+    var SHIP = { preparing: 'Being prepared', shipped_abroad: 'Shipped from abroad', arrived_lk: 'Arrived in Sri Lanka', out_for_delivery: 'Out for delivery', delivered: 'Delivered', returned: 'Returned to us' };
+    var nice = function (code) { return String(code == null ? '' : code).replace(/_/g, ' '); };
     var when = function (t) { return t ? new Date(t).toLocaleString() : ''; };
     var fail = function (err) { toast(err && err.message || 'Something went wrong'); };
     function refreshPreview() { var f = $('#pvIf'); if (f && f.contentWindow) try { f.contentWindow.postMessage({ type: 'scg-refresh' }, location.origin); } catch (e) {} }
@@ -1557,6 +1571,7 @@
         [!demo, demo + ' demo products are still listed', '#products/'],
         [!noPhoto, noPhoto + ' products have no real photo yet', '#products/'],
         [!d.backups || d.backups.ok, 'Backups are running and checked', '#backups'],
+        [!!(d.email && d.email.configured), 'Emails: connect an email provider. Until then customers cannot create an account or reset a password, and no order emails go out (ordering as a guest works)', null, 'Setup needed'],
         [d.payhere.configured && d.payhere.mode === 'live', 'Card payments: PayHere live account approved and switched on (owner approval needed)', null, 'Owner approval']
       ];
       var done = items.filter(function (x) { return x[0]; }).length;
@@ -1608,9 +1623,9 @@
             '<div class="sum-row"><span>Delivery</span><span>' + rs(o.shipping) + '</span></div>' + (o.discount ? '<div class="sum-row"><span>Discount</span><span>−' + rs(o.discount) + '</span></div>' : '') + '<div class="sum-row total"><span>Total</span><span>' + rs(o.total) + '</span></div></div></div>' +
           '<div class="filters" style="margin:12px 0">' + acts.join('') + '</div>' +
           '<h4>Timeline</h4>' + o.timeline.map(function (h) { return '<div class="sum-row"><span>' + esc(ST[h.to_status] || h.to_status) + ' <small class="muted">' + esc(h.actor) + (h.note ? ' — ' + esc(h.note) : '') + '</small></span><small>' + when(h.created_at) + '</small></div>'; }).join('') +
-          (o.payments.length ? '<h4>Payments</h4>' + o.payments.map(function (p) { return '<div class="sum-row"><span>' + esc(METHOD[p.provider]) + ' · ' + esc(p.status) + (p.provider_payment_id ? ' · PayHere ' + esc(p.provider_payment_id) : '') + (p.card_mask ? ' · ' + esc(p.method || '') + ' ' + esc(p.card_mask) : '') + (p.reference ? ' · ref ' + esc(p.reference) : '') + (p.verified_by ? ' · checked by ' + esc(p.verified_by) : '') + '</span><small>' + rs(p.expected) + '</small></div>'; }).join('') : '') +
-          (o.paymentEvents.length ? '<h4>PayHere notifications</h4>' + o.paymentEvents.map(function (e) { return '<div class="sum-row"><span>status ' + e.status_code + ' · ' + esc(e.result) + (e.signature_valid ? '' : ' · <b style="color:var(--red)">bad signature</b>') + '</span><small>' + when(e.received_at) + '</small></div>'; }).join('') : '') +
-          (o.shipments.length ? '<h4>Shipments</h4>' + o.shipments.map(function (s) { return '<div class="sum-row"><span>' + esc(s.carrier) + ' · ' + esc(s.tracking_number) + ' · ' + esc(s.status) + '</span></div>'; }).join('') : '') +
+          (o.payments.length ? '<h4>Payments</h4>' + o.payments.map(function (p) { return '<div class="sum-row"><span>' + esc(METHOD[p.provider] || nice(p.provider)) + ' · ' + esc(PAY[p.status] || nice(p.status)) + (p.provider_payment_id ? ' · PayHere ' + esc(p.provider_payment_id) : '') + (p.card_mask ? ' · ' + esc(p.method || '') + ' ' + esc(p.card_mask) : '') + (p.reference ? ' · ref ' + esc(p.reference) : '') + (p.verified_by ? ' · checked by ' + esc(p.verified_by) : '') + '</span><small>' + rs(p.expected) + '</small></div>'; }).join('') : '') +
+          (o.paymentEvents.length ? '<h4>PayHere notifications</h4>' + o.paymentEvents.map(function (e) { return '<div class="sum-row"><span>status ' + e.status_code + ' · ' + esc(nice(e.result)) + (e.signature_valid ? '' : ' · <b style="color:var(--red)">bad signature</b>') + '</span><small>' + when(e.received_at) + '</small></div>'; }).join('') : '') +
+          (o.shipments.length ? '<h4>Shipments</h4>' + o.shipments.map(function (s) { return '<div class="sum-row"><span>' + esc(s.carrier) + (s.tracking_number ? ' · tracking <b>' + esc(s.tracking_number) + '</b>' : '') + '</span><small>' + esc(SHIP[s.status] || nice(s.status)) + '</small></div>'; }).join('') : '') +
           (o.refunds.length ? '<h4>Refunds</h4>' + o.refunds.map(function (r) { return '<div class="sum-row"><span>' + esc(r.reason) + ' · by ' + esc(r.username || '') + (r.restock ? ' · restocked' : '') + '</span><span>' + rs(r.amount) + '</span></div>'; }).join('') : '');
         var done = function (msg) { return function () { toast(msg); closeModal(); if (onChange) onChange(); else route(); SCG.adminState().then(function () { db = SCG.load(); refreshPreview(); }); }; };
         var post = function (path, body, msg) { return SCG.api('POST', '/admin/orders/' + encodeURIComponent(o.number) + path, body || {}).then(done(msg), fail); };
@@ -1622,9 +1637,17 @@
           if (a === 'bank') { var ref = prompt('Check your BANK ACCOUNT (not a customer screenshot).\nEnter the bank reference for ' + rs(o.total) + ':'); if (ref) post('/verify-bank-transfer', { reference: ref, confirmChecked: true }, 'Bank transfer confirmed'); }
           if (a === 'resolve') { var n = prompt('What did you do to resolve it?'); if (n) post('/resolve-review', { note: n }, 'Review resolved'); }
           if (a === 'ship') {
-            var carrier = prompt('Courier / carrier (e.g. Domex, Pronto, DHL):'); if (!carrier) return;
-            var trk = prompt('Tracking number:') || ''; var st = prompt('Shipment status: preparing, shipped_abroad, arrived_lk, out_for_delivery, delivered', 'shipped_abroad'); if (!st) return;
-            post('/shipments', { carrier: carrier, trackingNumber: trk, status: st.trim() }, 'Shipment saved');
+            var box = $('#shipBox'); if (box) { box.remove(); return; }   // second click (or Cancel) closes the form
+            var last = o.shipments[o.shipments.length - 1] || {}, cur = SHIP[last.status] ? last.status : 'shipped_abroad';
+            $('#modalBody .filters').insertAdjacentHTML('afterend', '<form class="form ship-box" id="shipBox">' +
+              '<label>Courier<input name="carrier" required maxlength="60" list="shipCarriers" placeholder="e.g. Domex, Pronto, DHL" value="' + esc(last.carrier || '') + '"><datalist id="shipCarriers"><option value="Domex"><option value="Pronto"><option value="Koombiyo"><option value="DHL"><option value="Sri Lanka Post"></datalist></label>' +
+              '<label>Tracking number<input name="trk" maxlength="80" placeholder="Optional" value="' + esc(last.tracking_number || '') + '"></label>' +
+              '<label class="full">Where is the parcel now?<select name="st">' + Object.keys(SHIP).map(function (k) { return '<option value="' + k + '"' + (k === cur ? ' selected' : '') + '>' + esc(SHIP[k]) + '</option>'; }).join('') + '</select></label>' +
+              '<div class="form-foot"><button type="button" class="btn" data-act="ship">Cancel</button><button class="btn primary">Save shipment</button></div></form>');
+            var sf = $('#shipBox');
+            sf.onsubmit = function (ev) { ev.preventDefault(); var cr = sf.carrier.value.trim(); if (!cr) { sf.carrier.focus(); return; }
+              post('/shipments', { carrier: cr, trackingNumber: sf.trk.value.trim(), status: sf.st.value }, 'Shipment saved'); };
+            sf.carrier.focus();
           }
           if (a === 'cancel') {
             var reason = prompt('Reason for cancelling:'); if (!reason) return;
@@ -1632,7 +1655,9 @@
             if (paid) {
               if (!can('refunds.create')) { toast('This order is paid. Ask finance or the owner to record the refund.'); return; }
               var amt = prompt('Refund amount (you must actually pay this back to the customer):', String(o.total)); if (!amt) return;
-              body.refund = { amount: +amt, restock: confirm('Put the items back into stock?') };
+              var amtN = +String(amt).replace(/rs\.?|,|\s/gi, '');
+              if (!(amtN > 0)) { toast('Type the refund amount as a number, for example 3150'); return; }
+              body.refund = { amount: amtN, restock: confirm('Put the items back into stock?') };
             }
             post('/cancel', body, paid ? 'Refund recorded' : 'Order cancelled');
           }
@@ -1700,8 +1725,8 @@
             '<td style="white-space:nowrap"><button class="btn sm" data-edit="' + u.id + '">Edit</button> <button class="btn sm" data-pin="' + u.id + '">' + (withPin.indexOf(u.id) > -1 ? 'Change PIN' : 'Set PIN') + '</button></td></tr>';
         }).join('') + '</tbody></table></div></div>' +
         '<div class="panel"><h3>Second sign-in step <small>asked after the password</small></h3><form class="form" id="siF">' +
-          '<label class="full"><input type="radio" name="mode" value="totp"' + (si.secondStep === 'totp' ? ' checked' : '') + '> <b>Authenticator app</b> (6-digit code on the phone) — the safest</label>' +
-          '<label class="full"><input type="radio" name="mode" value="pin"' + (si.secondStep === 'pin' ? ' checked' : '') + '> <b>Admin PIN</b> (4–8 digits you set for each person with “Set PIN”). 5 wrong tries lock it for 15 minutes.</label>' +
+          '<label class="full chk"><input type="radio" name="mode" value="totp"' + (si.secondStep === 'totp' ? ' checked' : '') + '> <b>Authenticator app</b> (6-digit code on the phone) — the safest</label>' +
+          '<label class="full chk"><input type="radio" name="mode" value="pin"' + (si.secondStep === 'pin' ? ' checked' : '') + '> <b>Admin PIN</b> (4–8 digits you set for each person with “Set PIN”). 5 wrong tries lock it for 15 minutes.</label>' +
           '<p class="full muted" style="margin:0;font-size:13px">Set your own PIN before choosing “Admin PIN”. Staff without a PIN cannot sign in while PIN is chosen. Switch back to the authenticator app before going live.</p>' +
           '<div class="form-foot"><button class="btn primary">Save</button></div></form></div>' +
         '<div class="panel"><h3>Roles</h3>' + r.roles.map(function (ro) { return '<p><b>' + esc(ro.name) + '</b> <small class="muted">(' + esc(ro.code) + ')</small> — ' + esc(ro.description) + '<br><small class="muted">' + ro.permissions.map(esc).join(', ') + '</small></p>'; }).join('') + '</div>';
@@ -1778,7 +1803,7 @@
       SCG.api('GET', '/admin/coupons').then(function (list) { if (location.hash !== h0) return;
         v.innerHTML = '<div class="panel" style="padding:0"><div class="table-wrap"><table class="table"><thead><tr><th>Code</th><th>Discount</th><th>Min. order</th><th>Used</th><th>Valid</th><th>Active</th></tr></thead><tbody>' + (list.length ? list.map(function (c) {
           return '<tr><td><b>' + esc(c.code) + '</b></td><td>' + (c.kind === 'percent' ? c.value + '%' : rs(c.value)) + '</td><td>' + rs(c.min_subtotal) + '</td><td>' + c.used + (c.max_redemptions ? ' / ' + c.max_redemptions : '') + '</td><td><small>' + (c.starts_at ? when(c.starts_at) : 'now') + ' → ' + (c.ends_at ? when(c.ends_at) : 'no end') + '</small></td>' +
-            '<td><label class="switch"><input type="checkbox" data-cp="' + c.id + '"' + (c.active ? ' checked' : '') + '><i></i></label></td></tr>'; }).join('') : '<tr><td colspan="6" class="muted">No promo codes yet.</td></tr>') + '</tbody></table></div></div>';
+            '<td><label class="switch"><input type="checkbox" data-cp="' + c.id + '"' + (c.active ? ' checked' : '') + ' aria-label="Promo code ' + esc(c.code) + ' is active"><i></i></label></td></tr>'; }).join('') : '<tr><td colspan="6" class="muted">No promo codes yet.</td></tr>') + '</tbody></table></div></div>';
         v.onchange = function (e) { var c = e.target.closest('[data-cp]'); if (c) SCG.api('PUT', '/admin/coupons/' + c.dataset.cp, { active: c.checked }).then(function () { toast('Saved'); }, fail); };
         $('#addCp').onclick = function () {
           openModal('New promo code', '<form class="form" id="cpf"><label>Code<input name="code" required pattern="[A-Za-z0-9_-]{3,30}" placeholder="e.g. NEWYEAR10"></label><label>Type<select name="kind"><option value="percent">% off</option><option value="fixed">Fixed amount off</option></select></label>' +

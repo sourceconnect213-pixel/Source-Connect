@@ -1,6 +1,7 @@
 :root {
   --navy: #0b2a6f; --ink: #050b1c; --red: #d7141a; --bg: #f3f5fa; --card: #fff; --text: #0e1630;
-  --muted: #64708c; --line: #e3e7f0; --ok: #16a34a; --warn: #d97706; --radius: 12px;
+  --muted: #5b6680; --line: #e3e7f0; --ok: #16a34a; --warn: #d97706; --radius: 12px;
+  --ok-ink: #166534; --warn-ink: #92400e; --red-ink: #b91c1c;   /* the same colours, dark enough to READ as small text */
   --ease: cubic-bezier(.22, 1, .36, 1);
   font-family: 'Roboto', system-ui, sans-serif;
 }
@@ -84,11 +85,13 @@ input[type=checkbox], input[type=radio] { width: auto; accent-color: var(--red);
 .bar-track { height: 10px; background: #edf0f6; border-radius: 99px; overflow: hidden; }
 .bar-track i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--navy), var(--red)); transform-origin: left; animation: grow 1s var(--ease); }
 @keyframes grow { from { transform: scaleX(0); } }
-.warn-text { color: var(--warn); font-size: 12px; }
+.warn-text { color: var(--warn-ink); font-size: 12px; }
 
 /* table */
 .filters { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
 .filters input, .filters select { width: auto; min-width: 180px; }
+@media (min-width: 901px) { .filters input[type=search] { min-width: 250px; } }   /* room for the whole hint ("Search name, brand or SKU") */
+@media (max-width: 900px) { .filters input, .filters select { flex: 1 1 180px; } }
 .table-wrap { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); overflow: auto; }
 table { width: 100%; border-collapse: collapse; min-width: 760px; }
 th, td { padding: 12px 14px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: middle; }
@@ -103,11 +106,24 @@ tbody tr:hover { background: #fafbfe; }
 .prod-cell b { display: block; }
 .prod-cell small { color: var(--muted); }
 .tag { display: inline-block; white-space: nowrap; padding: 3px 9px; border-radius: 99px; font-size: 11px; font-weight: 600; background: #eef1f8; color: var(--navy); margin: 1px; }
-.tag.red { background: #fde8e9; color: var(--red); }
-.tag.ok { background: #e7f6ec; color: var(--ok); }
-.tag.warn { background: #fdf3e2; color: var(--warn); }
+.tag.red { background: #fde8e9; color: var(--red-ink); }
+.tag.ok { background: #e7f6ec; color: var(--ok-ink); }
+.tag.warn { background: #fdf3e2; color: var(--warn-ink); }
 .actions { display: flex; gap: 6px; justify-content: flex-end; }
 .muted { color: var(--muted); }
+.muted a:not(.btn):not(.tag), .hint a:not(.btn):not(.tag) { text-decoration: underline; text-underline-offset: 2px; }
+.table-wrap:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; }
+/* Orders (server mode): filter tabs, order pop-up rows, warning box. These names used to exist only in the shop's
+   stylesheet, which the admin does not load, so the tabs had no shape and "Delivery" ran into "Rs. 400". */
+.filters .chip { padding: 7px 12px; border-radius: 99px; border: 1px solid var(--line); background: #fff; font-size: 12.5px; font-weight: 500; }
+.filters .chip.on { background: var(--navy); color: #fff; border-color: var(--navy); }
+.sum-row { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; padding: 6px 0; font-size: 13.5px; }
+.sum-row > :first-child { min-width: 0; overflow-wrap: anywhere; }
+.sum-row > :last-child:not(:first-child) { flex: none; white-space: nowrap; text-align: right; }
+.sum-row.total { font-weight: 700; font-size: 16px; border-top: 1px solid var(--line); margin-top: 6px; padding-top: 12px; }
+.co-err { background: #fde8e9; color: #991b1b; border: 1px solid #f7c6c8; border-radius: 10px; padding: 12px 14px; font-size: 13.5px; font-weight: 500; margin-bottom: 12px; }
+.modal-body p a:not(.btn):not(.tag) { color: var(--navy); font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }   /* phone / WhatsApp links look like links */
+.ship-box { background: #fafbfe; border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; margin: 0 0 14px; }
 
 /* grid of cards (categories / collections / hero) */
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
@@ -133,6 +149,9 @@ tbody tr:hover { background: #fafbfe; }
 .form { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .form .full { grid-column: 1 / -1; }
 .form-foot { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px; }
+/* a tick box or radio button with its words on the SAME line (the general label rule stacks label text over its field) */
+label.chk { display: block; padding: 5px 0 5px 26px; text-indent: -26px; font-size: 13.5px; font-weight: 400; line-height: 1.45; color: var(--text); cursor: pointer; }
+label.chk input { width: 16px; height: 16px; margin: 0 10px 0 0; vertical-align: -3px; }
 .checks { display: flex; flex-wrap: wrap; gap: 8px; }
 .checks label { display: flex; flex-direction: row; align-items: center; gap: 6px; border: 1px solid var(--line); padding: 7px 12px; border-radius: 99px; font-weight: 500; color: var(--text); cursor: pointer; }
 .checks label:has(input:checked) { border-color: var(--navy); background: #eef1f8; }
@@ -210,6 +229,14 @@ tbody tr:hover { background: #fafbfe; }
 td input.inline { width: 80px; padding: 6px 8px; font-size: 13px; }
 th.chk, td.chk { width: 36px; }
 td.chk input, th.chk input { width: 16px; height: 16px; accent-color: var(--red); }
+@media (pointer: coarse) {
+  td.chk input, th.chk input { width: 24px; height: 24px; }
+  th.chk, td.chk { width: 44px; }
+  a.tag, button.tag { display: inline-flex; align-items: center; min-height: 28px; padding: 3px 11px; }
+  td > a:not(.btn):not(.tag) { display: inline-block; padding: 5px 0; }
+  details > summary { padding: 6px 0; }
+  .rep-row select { min-width: 56px; }
+}
 tr.sel td { background: #fff7f7; }
 .chip-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px; }
 .chip-tabs button { padding: 7px 12px; border-radius: 99px; border: 1px solid var(--line); background: #fff; font-size: 12.5px; font-weight: 500; }
@@ -314,9 +341,9 @@ a.item-card.coll-open:hover { transform: translateY(-3px); box-shadow: 0 16px 30
 .checklist .bar-track i { animation: none; background: linear-gradient(90deg, var(--ok), #22c55e); }
 .ck { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
 .ck > span:nth-child(2) { flex: 1; min-width: 0; }
-.ck-i { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 900; background: #fdf3e2; color: var(--warn); flex-shrink: 0; }
+.ck-i { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 900; background: #fdf3e2; color: var(--warn-ink); flex-shrink: 0; }
 .ck.ok { color: var(--muted); }
-.ck.ok .ck-i { background: #e7f6ec; color: var(--ok); }
+.ck.ok .ck-i { background: #e7f6ec; color: var(--ok-ink); }
 
 /* ---------- live preview panel ---------- */
 .shell.has-pv { grid-template-columns: 250px minmax(0, 1fr) var(--pvw, 50%); }
@@ -338,9 +365,9 @@ a.item-card.coll-open:hover { transform: translateY(-3px); box-shadow: 0 16px 30
 .pv-frame.scrolls { overflow-x: auto; overflow-y: hidden; }
 .pv-frame.scrolls .pv-sizer { margin: 0; }
 .pv-frame.mobile iframe { border-radius: 22px; box-shadow: 0 0 0 10px #0b1229, 0 20px 40px -10px rgba(0,0,0,.5); top: 10px; }
-.pv-tip { margin: 0 12px 12px; font-size: 12px; color: var(--muted); }
+.pv-tip { margin: 0 12px 12px; font-size: 12px; color: #525c75; }
 .pv-fab { position: fixed; right: 18px; bottom: 18px; z-index: 30; background: var(--navy); color: #fff; padding: 11px 16px; border-radius: 999px; font-weight: 600; font-size: 13px; box-shadow: 0 10px 24px -8px rgba(5,11,28,.6); }
-.nav-hi .pill.easy { background: #22c55e; color: #fff; font-size: 9.5px; letter-spacing: .08em; }
+.nav-hi .pill.easy { background: #15803d; color: #fff; font-size: 9.5px; letter-spacing: .08em; }   /* darker green: the small white letters are readable */
 /* visual editor left column */
 .pv-full .content { padding: 18px 16px; }
 .pv-full .top { padding: 14px 16px; }
@@ -374,6 +401,13 @@ a.item-card.coll-open:hover { transform: translateY(-3px); box-shadow: 0 16px 30
 .shell.has-pv .grid2, .shell.has-pv .cols { grid-template-columns: minmax(0, 1fr); }
 .shell.has-pv .rep-row { grid-template-columns: 1fr !important; }
 .shell.has-pv .rep-row .tools { justify-content: flex-end; }
+/* the same on a phone: side by side the boxes were too narrow to read what is typed in them */
+@media (max-width: 700px) {
+  .rep-row { grid-template-columns: 1fr !important; }
+  .rep-row .tools { justify-content: flex-end; }
+}
+/* a floating Save button must not hide under the floating "Show preview" button */
+body.has-pv-fab .save-bar { bottom: 58px; }
 .shell.has-pv .form { grid-template-columns: 1fr 1fr; }
 .shell.has-pv .stats { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
 .shell.has-pv .gp-panel { display: none; }
@@ -387,6 +421,8 @@ a.item-card.coll-open:hover { transform: translateY(-3px); box-shadow: 0 16px 30
 body.pv-dragging { cursor: col-resize; user-select: none; }
 body.pv-dragging iframe { pointer-events: none; }
 .pv-bar #pvZoom { flex: 0 0 auto; width: auto; padding: 7px 6px; }
+/* phone: the page chooser was squeezed to a bare arrow; let the bar use two lines instead */
+@media (max-width: 700px) { .pv-bar { flex-wrap: wrap; } .pv-bar #pvPage { flex: 1 1 130px; min-width: 120px; } }
 @media (max-width: 1100px) { .pv-split { display: none; } }
 
 /* Sales & Profit: money figures stay on one line */
@@ -402,6 +438,6 @@ body.pv-dragging iframe { pointer-events: none; }
 .rn-st.late { background: #fde8e8; color: var(--red); }
 .rn-st.ok { background: #e7f6ec; color: #17803d; }
 .rn-st.off { background: #eef0f4; color: #64748b; }
-#rnf label.chk { display: flex; align-items: center; gap: 8px; flex-direction: row; }
-#rnf label.chk input { width: 18px; height: 18px; }
+#rnf label.chk { display: flex; align-items: center; gap: 8px; flex-direction: row; padding-left: 0; text-indent: 0; }
+#rnf label.chk input { width: 18px; height: 18px; margin: 0; }
 @media (max-width: 700px) { .rn-banner { margin: 12px 16px 0; } }

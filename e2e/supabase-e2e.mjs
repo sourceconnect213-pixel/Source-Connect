@@ -119,6 +119,24 @@ check('another device cannot open the order by number alone', !(await tp.textCon
 await ap.keyboard.press('Escape'); await ap.evaluate(() => { document.getElementById('modal').classList.remove('open'); location.hash = 'orders'; }); await ap.waitForTimeout(1800);
 check('the order appears in the admin panel', (await ap.textContent('#olist')).includes(codNo));
 
+// 5b. the order pop-up in the admin: tidy rows, plain-language labels, and a shipment FORM (no typed status codes)
+check('order filter tabs look like tabs and show which one is chosen', await ap.evaluate(() => { const on = document.querySelector('#otabs .chip.on'), off = document.querySelector('#otabs .chip:not(.on)');
+  return !!on && !!off && on.getBoundingClientRect().height >= 28 && getComputedStyle(on).backgroundColor !== getComputedStyle(off).backgroundColor; }));
+await ap.click(`#olist tr[data-n="${codNo}"]`); await ap.waitForSelector('#modalBody .sum-row.total', { timeout: 15000 });
+const odRows = await ap.evaluate(() => [...document.querySelectorAll('#modalBody .sum-row')].map(r => ({ gap: r.lastElementChild.getBoundingClientRect().left - r.firstElementChild.getBoundingClientRect().right, text: r.textContent })));
+check('order pop-up: every label and its amount are apart (not run together)', odRows.length >= 4 && odRows.every(r => r.gap >= 8), JSON.stringify(odRows.map(r => Math.round(r.gap))));
+check('order pop-up: payment status in plain words, not a code', odRows.some(r => /COD – not collected/.test(r.text)) && !odRows.some(r => /cod_pending/.test(r.text)));
+let asked = 0; const noPrompt = d => { asked++; d.dismiss(); }; ap.on('dialog', noPrompt);
+await ap.click('#modalBody [data-act=ship]'); await ap.waitForSelector('#shipBox', { timeout: 5000 });
+check('shipment: a form with a list of statuses (staff do not type a code)', asked === 0 && (await ap.$$eval('#shipBox select[name=st] option', o => o.map(x => x.textContent).join('|'))) === 'Being prepared|Shipped from abroad|Arrived in Sri Lanka|Out for delivery|Delivered|Returned to us');
+await ap.fill('#shipBox [name=carrier]', 'Domex'); await ap.fill('#shipBox [name=trk]', 'E2E-TRK-1'); await ap.selectOption('#shipBox [name=st]', 'out_for_delivery');
+await ap.click('#shipBox button.primary'); await ap.waitForFunction(() => !document.querySelector('#modal.open'), null, { timeout: 15000 });
+ap.off('dialog', noPrompt);
+check('shipment saved in the database', sql(`SELECT s.carrier || ' ' || s.tracking_number || ' ' || s.status FROM app.shipments s JOIN app.orders o ON o.id = s.order_id WHERE o.order_number = '${codNo}'`) === 'Domex E2E-TRK-1 out_for_delivery');
+await ap.waitForTimeout(900); await ap.click(`#olist tr[data-n="${codNo}"]`); await ap.waitForSelector('#modalBody .sum-row.total', { timeout: 15000 });
+check('order pop-up shows the shipment in plain words', /Domex · tracking E2E-TRK-1\s*Out for delivery/.test(await ap.textContent('#modalBody')));
+await ap.evaluate(() => document.getElementById('modal').classList.remove('open'));
+
 // 6. card payment: redirect is not payment; only the signed notification is
 await ap.evaluate(() => { location.hash = 'settings'; }); await ap.waitForSelector('#dform input[name=payOnline]', { timeout: 15000 });
 await ap.check('#dform input[name=payOnline]', { force: true }); await ap.click('#dform button.primary');
@@ -291,6 +309,22 @@ check('mobile home: no sideways scrolling', (await mp.evaluate(() => document.do
 await mp.screenshot({ path: OUT + '/sb-home-mobile.jpg', type: 'jpeg', quality: 70 });
 await cartWith(mp, 'mens-2'); await mp.waitForSelector('#placeBtn:not([disabled])', { timeout: 20000 });
 check('mobile checkout: no sideways scrolling', (await mp.evaluate(() => document.documentElement.scrollWidth - innerWidth)) <= 1);
+
+// 9. when something goes wrong the visitor still sees something sensible (never a black or broken page)
+const dn = await b.newContext({ viewport: { width: 400, height: 860 } });   // a FIRST visit: the welcome intro would play
+await dn.route('**/rest/v1/rpc/storefront_snapshot', r => r.abort());
+const dp = await dn.newPage(); await dp.goto(withSb('')); await dp.waitForSelector('#app h2', { timeout: 20000 });
+const seen = await dp.evaluate(() => { const h = document.querySelector('#app h2'), r = h.getBoundingClientRect(), top = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+  return { text: h.textContent, onTop: top === h || h.contains(top), cover: document.documentElement.classList.contains('intro-on') }; });
+check('shop server unreachable on a first visit: a clear message is on screen (not the dark intro cover)', seen.onTop && !seen.cover && /short break/.test(seen.text), JSON.stringify(seen));
+check('…with a Try again button', await dp.isVisible('#app button'));
+await dn.close();
+const bk = await ctx({ viewport: { width: 400, height: 860 } }); await bk.route('**/storage/v1/object/public/product-images/**', r => r.abort());
+const bp = await bk.newPage();   // (not page(): the refused picture request is expected here)
+await bp.goto(withSb('#p/mens-12')); await bp.waitForSelector('#addCart', { timeout: 20000 }); await bp.waitForTimeout(1500);
+const pic = await bp.evaluate(() => ({ drawn: !!document.querySelector('#big svg.pic'), broken: [...document.images].filter(i => i.complete && !i.naturalWidth && getComputedStyle(i).visibility !== 'hidden').length }));
+check('a product photo that cannot be loaded is replaced by the drawn product (no broken-picture mark)', pic.drawn && pic.broken === 0, JSON.stringify(pic));
+await bk.close();
 
 check('no JavaScript errors in any page', errors.length === 0, errors.slice(0, 5).join(' | '));
 await b.close();

@@ -15,7 +15,10 @@ Each step needs the owner's own account or decision. Claude does not buy service
   - minimum password length 12, letters + digits;
   - TOTP MFA enrolment **on**;
   - redirect URLs = the staging site;
-  - email provider (SMTP) configured.
+  - email provider (SMTP) configured. Supabase's built-in sender only delivers to members of the project's own
+    organization (Auth error `email_address_not_authorized`), so until this is done a real customer cannot create an
+    account or reset a password (ordering as a guest works). When it is connected, record it with
+    `UPDATE app.ops_settings SET email_configured = true;` and the line in the admin's "Before you go live" list turns green.
 - [ ] `js/config.js` on a **staging** Pages project: Supabase URL + **anon** key only. Never use the service role key there.
 - [ ] Create the owner staff account:
   - first set `require_staff_mfa` (it is already true by default);

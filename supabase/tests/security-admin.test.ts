@@ -150,6 +150,16 @@ describe('settings, banners, staff', () => {
     expect((await rpc(o, 'admin_audit')).error).toBeNull();
     expect((await rpc(await staff('support1'), 'admin_audit')).error?.code).toBe('42501');
   });
+  it('dashboard says whether customer emails can be sent (off until an email provider is connected)', async () => {
+    const o = await staff('owner1');
+    const before = (await rpc(o, 'admin_dashboard')).data;
+    expect(before.email).toEqual({ configured: false });
+    expect(before.payhere).toHaveProperty('mode');   // the rest of the dashboard is still there
+    expect(typeof before.orders).toBe('number'); expect(Array.isArray(before.lowStock)).toBe(true); expect(before.last7days).toHaveLength(7);
+    await db().query(`UPDATE app.ops_settings SET email_configured = true`);
+    try { expect((await rpc(o, 'admin_dashboard')).data.email).toEqual({ configured: true }); }
+    finally { await db().query(`UPDATE app.ops_settings SET email_configured = false`); }
+  });
 });
 
 describe('product photo uploads (Supabase Storage)', () => {
