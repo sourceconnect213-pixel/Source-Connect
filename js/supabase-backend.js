@@ -247,6 +247,7 @@
     if (path === '/admin/sign-in' && method === 'GET') return rpc('admin_sign_in_settings', {}, 'staff');
     if (path === '/admin/sign-in' && method === 'PUT') return rpc('admin_set_second_step', { p_mode: body.secondStep }, 'staff');
     if ((x = m(/^\/admin\/staff\/([0-9a-f-]{36})\/pin$/, path))) return rpc('admin_set_staff_pin', { p_staff_id: x[1], p_pin: body.pin ? String(body.pin) : null }, 'staff');
+    if ((x = m(/^\/admin\/staff\/([^/]+)$/, path)) && method === 'DELETE') return edge('admin-staff', { action: 'delete', id: x[1] }, 'staff');
     if ((x = m(/^\/admin\/staff\/([^/]+)$/, path))) return edge('admin-staff', Object.assign({ action: 'update', id: x[1] }, body), 'staff');
     return Promise.reject(err(404, 'not_found', 'Unknown request: ' + method + ' ' + path));
   }

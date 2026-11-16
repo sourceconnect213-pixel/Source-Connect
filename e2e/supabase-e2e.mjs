@@ -360,6 +360,18 @@ await kp.reload(); await kp.waitForSelector('#shell:not([hidden])', { timeout: 2
 check('after approval the co-admin sees Orders', await kp.isVisible('#sideNav a[data-v=orders]'));
 await coCtx.close();
 
+// 10b. main admin deletes the co-admin account from Staff & Roles (typing the username to confirm)
+await ap.evaluate(() => { location.hash = 'dashboard'; }); await ap.waitForTimeout(600);
+await ap.evaluate(() => { location.hash = 'staff'; }); await ap.waitForSelector('tr:has-text("coadmine2e") [data-edit]', { timeout: 15000 });
+await ap.click('tr:has-text("coadmine2e") [data-edit]'); await ap.waitForSelector('#stDel');
+ap.once('dialog', d => d.accept('wrong-name')); await ap.click('#stDel'); await ap.waitForTimeout(800);
+check('delete with a wrong username does nothing', sql(`SELECT count(*) FROM app.staff_users WHERE id = '${coId}'`) === '1');
+ap.once('dialog', d => d.accept('coadmine2e')); await ap.click('#stDel'); await ap.waitForTimeout(2500);
+check('main admin deletes a staff account (sign-in account removed too)', sql(`SELECT count(*) FROM app.staff_users WHERE id = '${coId}'`) === '0' && sql(`SELECT count(*) FROM auth.users WHERE id = '${coId}'`) === '0');
+check('own account has no delete button', await ap.evaluate(async () => { location.hash = 'staff'; await new Promise(r => setTimeout(r, 1500));
+  const row = [...document.querySelectorAll('#view tr')].find(tr => /ownere2e/.test(tr.textContent)); row.querySelector('[data-edit]').click(); await new Promise(r => setTimeout(r, 500));
+  const none = !document.getElementById('stDel'); document.getElementById('modal').classList.remove('open'); return none; }));
+
 // 11. usage page (main admin)
 await ap.evaluate(() => { location.hash = 'usage'; }); await ap.waitForSelector('.use-row', { timeout: 15000 });
 const use = await ap.$$eval('.use-row .use-head', l => l.map(x => x.textContent.replace(/\s+/g, ' ').trim()));

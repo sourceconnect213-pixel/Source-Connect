@@ -145,6 +145,37 @@ describe('admin-staff Edge Function', () => {
     expect((await rpc(nu2, 'admin_orders')).error).not.toBeNull();
     expect((await anon().auth.signInWithPassword({ email: `${uname}@staff.test`, password: 'My-Own-Strong-Pass-1' })).error).not.toBeNull();
   });
+  it('main admin deletes a staff account: sign-in gone, history kept; never yourself, never the last owner, never by others', async () => {
+    const owner = await staff('owner1');
+    const tok = (await owner.auth.getSession()).data.session!.access_token;
+    const call = (body: unknown, t = tok) => fetch(`${cfg().url}/functions/v1/admin-staff`, { method: 'POST', headers: { 'content-type': 'application/json', apikey: cfg().anon, authorization: `Bearer ${t}` }, body: JSON.stringify(body) });
+    const uname = 'tmpdel' + Date.now().toString().slice(-6);
+    const c = await call({ action: 'create', username: uname, displayName: 'To Delete', email: `${uname}@staff.test`, roles: ['co_admin'], temporaryPassword: 'Temporary-Pass-77' });
+    expect(c.status).toBe(200);
+    const id = (await c.json()).id;
+    // the same email a second time: clear message, nothing created
+    const dup = await call({ action: 'create', username: uname + 'b', displayName: 'Dup', email: `${uname}@staff.test`, roles: ['co_admin'], temporaryPassword: 'Temporary-Pass-77' });
+    expect(dup.status).toBe(409);
+    expect((await dup.json()).message).toMatch(/already used.*\+coadmin@gmail\.com/s);
+    expect((await q1(`SELECT count(*)::int n FROM app.staff_users WHERE username = $1`, [uname + 'b'])).n).toBe(0);
+    // something in the history that points at this person
+    await db().query(`INSERT INTO app.product_costs (product_id, cost_cents, updated_by) SELECT id, 50000, $1 FROM app.products WHERE slug = 'mens-2'
+                      ON CONFLICT (product_id) DO UPDATE SET updated_by = EXCLUDED.updated_by`, [id]);
+    const sup = await staff('support1');
+    expect((await call({ action: 'delete', id }, (await sup.auth.getSession()).data.session!.access_token)).status).toBe(403);
+    expect((await call({ action: 'delete', id })).status).toBe(200);
+    expect((await q1(`SELECT count(*)::int n FROM app.staff_users WHERE id = $1`, [id])).n).toBe(0);
+    expect((await q1(`SELECT count(*)::int n FROM auth.users WHERE id = $1`, [id])).n).toBe(0);
+    expect((await anon().auth.signInWithPassword({ email: `${uname}@staff.test`, password: 'Temporary-Pass-77' })).error).not.toBeNull();
+    expect((await q1(`SELECT before ->> 'username' u FROM app.audit_logs WHERE action = 'staff.delete' AND entity_id = $1`, [id])).u).toBe(uname);
+    expect((await q1(`SELECT count(*)::int n FROM app.product_costs WHERE product_id = (SELECT id FROM app.products WHERE slug = 'mens-2')`)).n).toBe(1);   // history row kept
+    // never yourself (the rule "keep an active owner" is checked too; only an owner can delete, so it is a safety net)
+    const ownerId = (await q1(`SELECT id FROM app.staff_users WHERE username = 'owner1'`)).id;
+    const self = await call({ action: 'delete', id: ownerId });
+    expect(self.status).toBe(400); expect((await self.json()).message).toMatch(/your own account/);
+    expect((await rpc(owner, 'admin_staff_delete', { p_staff_id: ownerId })).code).toBe('bad_request');
+    expect((await anon().rpc('admin_staff_delete', { p_staff_id: ownerId })).error).not.toBeNull();
+  });
   it('needs a signed-in caller', async () => {
     expect((await fetch(`${cfg().url}/functions/v1/admin-staff`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status).toBe(401);
   });

@@ -1859,12 +1859,20 @@
             '<div class="full"><b>Extra access</b> <small class="muted">(on top of the roles; only you, the main admin, can give it)</small><br>' + ac.permissions.map(function (p) {
               var viaRole = r.roles.some(function (ro) { return u.roles.indexOf(ro.code) > -1 && (ro.permissions || []).indexOf(p.code) > -1; });
               return viaRole ? '' : '<label class="chk"><input type="checkbox" name="extra" value="' + esc(p.code) + '"' + ((ac.extra[u.id] || []).indexOf(p.code) > -1 ? ' checked' : '') + '> ' + esc(permName(p.code, p.description)) + '</label>'; }).join('') + '</div>' +
+            (String(u.username).toLowerCase() === String(me.username || '').toLowerCase() ? '' : '<div class="full ship-box" style="margin:0"><b>Delete this account</b><p class="muted" style="margin:4px 0 10px;font-size:13px">' + esc(u.display_name) + ' will not be able to sign in again. Orders, stock history and the audit log are kept.</p><button type="button" class="btn danger" id="stDel">Delete account</button></div>') +
             '<div class="form-foot"><button class="btn primary">Save</button></div></form>');
           $('#stf').onsubmit = function (ev) { ev.preventDefault(); var E = ev.target.elements, body = { displayName: E.displayName.value.trim(), roles: vals(ev.target, 'role'), shops: vals(ev.target, 'shop'), status: E.status.value, unlock: E.unlock.checked };
             if (E.pw.value) body.resetPassword = E.pw.value;
-            var extra = vals(ev.target, 'extra');
+            var extra = vals(ev.target, 'extra');   // (Delete is a separate button below)
             SCG.api('PUT', '/admin/staff/' + u.id, body).then(function () { return SCG.api('PUT', '/admin/staff/' + u.id + '/access', { permissions: extra }); })
               .then(function () { toast('Saved'); closeModal(); route(); }, fail); };
+          var del = $('#stDel');
+          if (del) del.onclick = function () {
+            var typed = prompt('This cannot be undone. Type the username  ' + u.username + '  to delete the account:', '');
+            if (typed === null) return;
+            if (typed.trim().toLowerCase() !== String(u.username).toLowerCase()) { toast('The username did not match. Nothing was deleted.'); return; }
+            SCG.api('DELETE', '/admin/staff/' + u.id).then(function () { toast('Account deleted'); closeModal(); route(); }, fail);
+          };
         };
       }, function (err) { if (location.hash !== h0) return; v.innerHTML = '<p class="muted">' + esc(err.message) + '</p>'; });
     } };
