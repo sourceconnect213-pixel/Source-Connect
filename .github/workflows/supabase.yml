@@ -6,6 +6,7 @@ on:
     branches: ['**']
     paths: ['supabase/**', 'vps/**', 'js/**', 'css/**', 'assets/**', 'admin/**', 'index.html', 'deploy/**', 'e2e/supabase-e2e.mjs', '.github/workflows/supabase.yml']
   pull_request:
+  workflow_dispatch:   # run (and deploy staging) by hand when GitHub misses a push
 permissions:
   contents: read
 jobs:
@@ -58,7 +59,7 @@ jobs:
   # Needs the repository secret CLOUDFLARE_API_TOKEN (Cloudflare token with "Cloudflare Pages: Edit"); without it the job is skipped.
   deploy-staging:
     needs: supabase
-    if: github.event_name == 'push' && github.ref == 'refs/heads/claude/supabase-vps7-hybrid'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/claude/supabase-vps7-hybrid'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
