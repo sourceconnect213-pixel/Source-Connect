@@ -96,3 +96,23 @@ describe('more access only when the main admin approves', () => {
     expect(t).toEqual({ a: false, b: false });
   });
 });
+
+describe('usage page (hosting plan)', () => {
+  it('main admin sees real numbers from the database', async () => {
+    const u = (await rpc(owner, 'admin_usage')).data;
+    expect(u.databaseBytes).toBeGreaterThan(1_000_000);
+    expect(u.maxConnections).toBeGreaterThan(0);
+    expect(u.connections).toBeGreaterThan(0);
+    expect(u.connections).toBeLessThanOrEqual(u.maxConnections);
+    const n = await q1(`SELECT (SELECT count(*) FROM app.orders)::int o, (SELECT count(*) FROM app.products WHERE status = 'active')::int p, (SELECT count(*) FROM auth.users)::int a`);
+    expect(u.ordersTotal).toBe(n.o); expect(u.products).toBe(n.p); expect(u.accounts).toBe(n.a);
+    for (const k of ['storageBytes', 'storageFiles', 'signedInThisMonth', 'ordersToday', 'ordersThisMonth', 'customers', 'staff']) expect(typeof u[k], k).toBe('number');
+  });
+  it('a co-admin cannot see it unless the main admin gives it; visitors never', async () => {
+    expect((await rpc(co, 'admin_usage')).error?.code).toBe('42501');
+    await rpc(owner, 'admin_set_extra_access', { p_staff_id: coId, p_permissions: ['usage.view'] });
+    try { expect((await rpc(co, 'admin_usage')).error).toBeNull(); }
+    finally { await rpc(owner, 'admin_set_extra_access', { p_staff_id: coId, p_permissions: [] }); }
+    expect((await anon().rpc('admin_usage', {})).error).not.toBeNull();
+  });
+});

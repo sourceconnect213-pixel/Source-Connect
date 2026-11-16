@@ -236,6 +236,7 @@
     if (path === '/admin/coupons' && method === 'POST') return rpc('admin_create_coupon', { p_data: body }, 'staff');
     if ((x = m(/^\/admin\/coupons\/([^/]+)$/, path))) return rpc('admin_set_coupon_active', { p_id: x[1], p_active: !!body.active }, 'staff');
     // extra access: a staff member asks, the main admin approves (or gives it directly)
+    if (path === '/admin/usage') return rpc('admin_usage', {}, 'staff');
     if (path === '/admin/access/mine') return rpc('admin_my_access', {}, 'staff');
     if (path === '/admin/access' && method === 'GET') return rpc('admin_access_overview', {}, 'staff');
     if (path === '/admin/access/requests' && method === 'POST') return rpc('admin_request_access', { p_permission: body.permission, p_note: body.note || '' }, 'staff');

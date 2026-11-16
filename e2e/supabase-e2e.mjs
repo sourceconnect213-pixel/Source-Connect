@@ -360,6 +360,12 @@ await kp.reload(); await kp.waitForSelector('#shell:not([hidden])', { timeout: 2
 check('after approval the co-admin sees Orders', await kp.isVisible('#sideNav a[data-v=orders]'));
 await coCtx.close();
 
+// 11. usage page (main admin)
+await ap.evaluate(() => { location.hash = 'usage'; }); await ap.waitForSelector('.use-row', { timeout: 15000 });
+const use = await ap.$$eval('.use-row .use-head', l => l.map(x => x.textContent.replace(/\s+/g, ' ').trim()));
+check('usage page shows database, photos, monthly users and connections against the plan', use.length === 4 && /Database.* of 8 GB/.test(use[0]) && /of 100 GB/.test(use[1]) && /of 100,000/.test(use[2]) && /allowed/.test(use[3]), use.join(' | '));
+check('usage page: orders in total match the database', (await ap.textContent('#view')).includes(Number(sql(`SELECT count(*) FROM app.orders`)).toLocaleString('en-US')));
+
 check('no JavaScript errors in any page', errors.length === 0, errors.slice(0, 5).join(' | '));
 await b.close();
 sql(`UPDATE app.security_settings SET require_staff_mfa = false`);

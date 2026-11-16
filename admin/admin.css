@@ -408,6 +408,13 @@ a.item-card.coll-open:hover { transform: translateY(-3px); box-shadow: 0 16px 30
 }
 /* a floating Save button must not hide under the floating "Show preview" button */
 body.has-pv-fab .save-bar { bottom: 58px; }
+/* Usage page */
+.use-row { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.use-row:last-child { border-bottom: 0; }
+.use-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; font-size: 13.5px; }
+.use-bar { width: 100%; height: 10px; }
+.use-bar i { animation: none; }
+.use-bar.ok i { background: #16a34a; } .use-bar.warn i { background: #d97706; } .use-bar.red i { background: var(--red); }
 .shell.has-pv .form { grid-template-columns: 1fr 1fr; }
 .shell.has-pv .stats { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
 .shell.has-pv .gp-panel { display: none; }

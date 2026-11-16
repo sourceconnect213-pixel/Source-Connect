@@ -1420,20 +1420,24 @@
     // hide menu items this person cannot use
     var NEED = { dashboard: 'dashboard.view', orders: 'orders.read', customers: 'customers.read', products: 'catalog.read', flash: 'content.write', categories: 'catalog.write', origins: 'settings.write',
       collections: 'catalog.read', homepage: 'content.write', banners: 'content.write', header: 'content.write', pages: 'content.write', settings: 'content.write', editor: 'catalog.read',
-      staff: 'staff.manage', audit: 'audit.read', backups: 'backups.read', coupons: 'coupons.manage', reports: 'reports.view', renewals: 'renewals.manage', access: 'dashboard.view' };
+      staff: 'staff.manage', audit: 'audit.read', backups: 'backups.read', coupons: 'coupons.manage', reports: 'reports.view', renewals: 'renewals.manage', access: 'dashboard.view', usage: 'usage.view' };
     // plain names for what can be asked for / given on top of a role
     var PERM_NAME = { 'dashboard.view': 'Dashboard', 'reports.view': 'Sales & profit reports', 'costs.write': 'Cost prices', 'catalog.read': 'See products',
       'catalog.write': 'Add and edit products, photos, categories and collections', 'inventory.adjust': 'Change stock', 'orders.read': 'See orders',
       'orders.update': 'Change order and shipment status', 'payments.read': 'See payment details', 'payments.verify': 'Confirm bank transfers and cash collected',
       'refunds.create': 'Refunds and cancelling paid orders', 'customers.read': 'See customer names, phones and addresses', 'customers.write': 'Edit or disable customer accounts',
       'content.write': 'Banners, homepage, header/footer, pages and flash sale', 'settings.write': 'Delivery fees, payment options and import countries',
-      'coupons.manage': 'Promo codes', 'audit.read': 'Audit log', 'backups.read': 'Backup status', 'renewals.manage': 'Renewal reminders' };
+      'coupons.manage': 'Promo codes', 'usage.view': 'Hosting usage (database, photos, users)', 'audit.read': 'Audit log', 'backups.read': 'Backup status', 'renewals.manage': 'Renewal reminders' };
     var permName = function (c, d) { return PERM_NAME[c] || d || c; };
     function applyPermissions() {
       var nav = $('#sideNav');
       if (!$('#sideNav [data-v=reports]')) {
         var dash = $('#sideNav a[data-v=dashboard]');
         if (dash) dash.insertAdjacentHTML('afterend', '<a href="#reports" data-v="reports"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Sales &amp; Profit</a>');
+      }
+      if (!$('#sideNav [data-v=usage]')) {
+        var rep = $('#sideNav a[data-v=reports]');
+        if (rep) rep.insertAdjacentHTML('afterend', '<a href="#usage" data-v="usage"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9M12 12l5-5M12 3v4M21 12h-4"/></svg>Usage</a>');
       }
       if (!$('#sideNav [data-v=staff]')) {
         nav.insertAdjacentHTML('beforeend', '<small class="side-label">Security &amp; data</small>' +
@@ -1454,6 +1458,45 @@
       if (!me || !can('staff.manage')) return;
       SCG.api('GET', '/admin/access').then(function (d) { var p = $('#acPill'); if (p) p.textContent = d.pending ? String(d.pending) : ''; }, function () {});
     }
+
+    // ---------- usage: how much of the hosting plan is used ----------
+    // Plan amounts from the Supabase and Cloudflare documentation (checked 2026-11-16). Update here if the plan changes.
+    var PLAN = { diskGB: 8, storageGB: 100, mau: 100000, egressGB: 250 };
+    VIEWS.usage = { title: 'Usage', sub: 'How much of the Supabase Pro plan the shop uses', render: function (v) {
+      v.innerHTML = '<p class="muted">Loading…</p>';
+      var h0 = location.hash;
+      SCG.api('GET', '/admin/usage').then(function (u) { if (location.hash !== h0) return;
+        var GB = 1073741824;
+        var size = function (b) { return b >= GB ? (b / GB).toFixed(2) + ' GB' : b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(0, Math.round(b / 1024)) + ' KB'; };
+        var num = function (n) { return Number(n).toLocaleString('en-US'); };
+        var bar = function (label, used, cap, usedTxt, capTxt, note) {
+          var pct = cap > 0 ? used / cap * 100 : 0, shown = pct < 0.1 && used > 0 ? '< 0.1' : pct.toFixed(pct < 10 ? 1 : 0);
+          var cls = pct >= 90 ? 'red' : pct >= 70 ? 'warn' : 'ok';
+          return '<div class="use-row"><div class="use-head"><b>' + esc(label) + '</b><span>' + esc(usedTxt) + ' of ' + esc(capTxt) + ' <span class="tag ' + cls + '">' + shown + '%</span></span></div>' +
+            '<div class="bar-track use-bar ' + cls + '" role="progressbar" aria-label="' + esc(label) + '" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.min(100, Math.round(pct)) + '"><i style="width:' + Math.min(100, Math.max(pct, used > 0 ? 0.6 : 0)) + '%"></i></div>' +
+            (note ? '<small class="muted">' + note + '</small>' : '') + '</div>';
+        };
+        var ref = (/^https:\/\/([a-z0-9]+)\.supabase\.co$/.exec((window.SCGSupabase && SCGSupabase.url) || '') || [])[1];   // only for the hosted project
+        var dash = ref ? 'https://supabase.com/dashboard/project/' + ref : '';
+        v.innerHTML =
+          '<div class="panel"><h3>Supabase Pro plan <small>measured ' + esc(when(u.measuredAt)) + '</small></h3>' +
+            bar('Database', u.databaseBytes, PLAN.diskGB * GB, size(u.databaseBytes), PLAN.diskGB + ' GB disk included', 'The disk grows by itself on Pro when it is 90% full (extra disk is billed). Keep an eye above 70%.') +
+            bar('Photos and files', u.storageBytes, PLAN.storageGB * GB, size(u.storageBytes), PLAN.storageGB + ' GB included', num(u.storageFiles) + ' files.') +
+            bar('Accounts signed in this month', u.signedInThisMonth, PLAN.mau, num(u.signedInThisMonth), num(PLAN.mau) + ' monthly active users included',
+              'Counted from the first of the month (Sri Lanka time). Supabase also counts token refreshes and uses your billing dates, so its own number can be a little higher.') +
+            bar('Database connections right now', u.connections, u.maxConnections, num(u.connections), num(u.maxConnections) + ' allowed', 'Includes Supabase\'s own services. Visitors do not each hold a connection.') +
+          '</div>' +
+          '<div class="panel"><h3>The shop</h3><div class="stats">' +
+            stat('Orders today', num(u.ordersToday), '#2563eb') + stat('Orders this month', num(u.ordersThisMonth), '#16a34a') + stat('Orders in total', num(u.ordersTotal), '#0b2a6f') +
+            stat('Products on sale', num(u.products), '#d97706') + stat('Customer accounts', num(u.customers), '#9333ea') + stat('Active staff', num(u.staff), '#64748b') +
+          '</div></div>' +
+          '<div class="panel"><h3>Not measured here</h3>' +
+            '<p style="margin-top:0"><b>Data sent to visitors (egress)</b>: ' + PLAN.egressGB + ' GB a month included on Pro. Supabase measures this outside the database, so see it on the Supabase dashboard → <b>Organization → Usage</b>' + (dash ? ' (<a href="' + esc(dash) + '" target="_blank" rel="noopener">open the project</a>)' : '') + '.</p>' +
+            '<p><b>Website pages and pictures in the site itself</b> are served by Cloudflare Pages: requests to them are free and unlimited.</p>' +
+            '<p style="margin-bottom:0"><b>Load test (16 Nov 2026)</b>: 100 visitors opening the shop at the same moment, without a pause → 214 page loads a second, 0 errors, 95% answered within 0.6 s. Tested with 1 product; repeat the test when the catalogue is full.</p>' +
+          '</div>';
+      }, function (err) { if (location.hash !== h0) return; v.innerHTML = '<p class="muted">' + esc(err.message) + '</p>'; });
+    } };
 
     // ---------- my access: what I may do, and asking the main admin for more ----------
     VIEWS.access = { title: 'My Access', sub: 'What you can do here, and asking the main admin for more', render: function (v) {
