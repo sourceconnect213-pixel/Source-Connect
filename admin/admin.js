@@ -1805,9 +1805,13 @@
             : '<p class="muted" style="margin:0">When a co-admin asks for more access, it appears here for you to approve or decline.</p>') + '</div>';
         var pc = $('#acPill'); if (pc) pc.textContent = pend.length ? String(pend.length) : '';
         var shops = (db.shops || []).map(function (s) { return s.id; });
+        var stepOf = function (u) { return u.second_step || si.secondStep; };   // the person's own choice, else the shop default
+        var stepRadios = function (sel) { return '<div class="full"><b>Verify with</b> <small class="muted">(asked after the password)</small><br>' +
+          '<label class="chk"><input type="radio" name="step" value="pin"' + (sel === 'pin' ? ' checked' : '') + '> PIN</label> ' +
+          '<label class="chk"><input type="radio" name="step" value="totp"' + (sel === 'totp' ? ' checked' : '') + '> Authenticator app</label></div>'; };
         v.innerHTML = reqHTML + '<div class="panel" style="padding:0"><div class="table-wrap"><table class="table"><thead><tr><th>Name</th><th>Roles</th><th>Departments</th><th>Status</th><th>Last sign-in</th><th></th></tr></thead><tbody>' + r.staff.map(function (u) {
           var ex = ac.extra[u.id] || [];
-          return '<tr><td><b>' + esc(u.display_name) + '</b><br><small class="muted">' + esc(u.username) + '</small></td><td>' + u.roles.map(esc).join(', ') + (ex.length ? '<br><small class="muted">+ approved: ' + ex.map(function (c) { return esc(permName(c)); }).join(', ') + '</small>' : '') + '</td><td>' + (u.shops.length ? u.shops.map(esc).join(', ') : 'All') + '</td><td>' + esc(u.status) + (u.locked_until && new Date(u.locked_until) > new Date() ? ' · locked' : '') + (u.must_change_password ? ' · temp password' : '') + '</td><td><small>' + when(u.last_login_at) + '</small></td>' +
+          return '<tr><td><b>' + esc(u.display_name) + '</b><br><small class="muted">' + esc(u.username) + ' · ' + (stepOf(u) === 'pin' ? 'PIN' : 'Authenticator') + '</small></td><td>' + u.roles.map(esc).join(', ') + (ex.length ? '<br><small class="muted">+ approved: ' + ex.map(function (c) { return esc(permName(c)); }).join(', ') + '</small>' : '') + '</td><td>' + (u.shops.length ? u.shops.map(esc).join(', ') : 'All') + '</td><td>' + esc(u.status) + (u.locked_until && new Date(u.locked_until) > new Date() ? ' · locked' : '') + (u.must_change_password ? ' · temp password' : '') + '</td><td><small>' + when(u.last_login_at) + '</small></td>' +
             '<td style="white-space:nowrap"><button class="btn sm" data-edit="' + u.id + '">Edit</button> <button class="btn sm" data-pin="' + u.id + '">' + (withPin.indexOf(u.id) > -1 ? 'Change PIN' : 'Set PIN') + '</button></td></tr>';
         }).join('') + '</tbody></table></div></div>' +
         '<div class="panel"><h3>Second sign-in step <small>asked after the password</small></h3><form class="form" id="siF">' +
@@ -1820,12 +1824,34 @@
         var shopBoxes = function (sel) { return shops.map(function (s) { return '<label class="chk"><input type="checkbox" name="shop" value="' + esc(s) + '"' + (sel.indexOf(s) > -1 ? ' checked' : '') + '> ' + esc(s) + '</label>'; }).join(''); };
         var vals = function (f, n) { return $$('input[name=' + n + ']:checked', f).map(function (x) { return x.value; }); };
         $('#addStaff').onclick = function () {
-          openModal('Add staff', '<form class="form" id="stf"><label>Username<input name="username" required pattern="[A-Za-z0-9._-]{3,40}"></label><label>Full name<input name="displayName" required></label><label class="full">Email (optional)<input name="email" type="email"></label>' +
-            '<label class="full">Temporary password (12+ characters; they must change it at first sign-in)<input name="pw" required minlength="12"></label><div class="full"><b>Roles</b><br>' + roleBoxes([]) + '</div><div class="full"><b>Departments</b> <small class="muted">(only for “Department Staff”)</small><br>' + shopBoxes([]) + '</div>' +
+          var roleOpts = r.roles.map(function (ro) { return '<option value="' + esc(ro.code) + '"' + (ro.code === 'co_admin' ? ' selected' : '') + '>' + esc(ro.name) + '</option>'; }).join('');
+          var pinIn = function (n) { return '<input name="' + n + '" type="password" inputmode="numeric" pattern="[0-9]{4,8}" maxlength="8" autocomplete="new-password">'; };
+          openModal('Add staff', '<form class="form" id="stf">' +
+            '<label class="full">Full name <small class="muted">(who uses this account)</small><input name="displayName" required maxlength="80"></label>' +
+            '<label>Username <small class="muted">(to sign in)</small><input name="username" required pattern="[A-Za-z0-9._\\-]{3,40}" title="3 to 40 letters, numbers, . _ -" autocomplete="off" autocapitalize="none" spellcheck="false"></label>' +
+            '<label>Password <small class="muted">(12+ letters and numbers)</small><input name="pw" required minlength="12" autocomplete="new-password"></label>' +
+            '<label class="full">Role<select name="role">' + roleOpts + '</select></label>' +
+            '<div class="full" id="depBox" style="display:none"><b>Departments</b><br>' + shopBoxes([]) + '</div>' +
+            stepRadios(si.secondStep) +
+            '<label class="pinF">PIN <small class="muted">(4–8 digits)</small>' + pinIn('pin') + '</label><label class="pinF">PIN again <small class="muted">(the same)</small>' + pinIn('pin2') + '</label>' +
             '<div class="form-foot"><button class="btn primary">Create</button></div></form>');
-          $('#stf').onsubmit = function (e) { e.preventDefault(); var E = e.target.elements;
-            SCG.api('POST', '/admin/staff', { username: E.username.value.trim(), displayName: E.displayName.value.trim(), email: E.email.value.trim(), roles: vals(e.target, 'role'), shops: vals(e.target, 'shop'), temporaryPassword: E.pw.value })
-              .then(function () { toast('Staff account created'); closeModal(); route(); }, fail); };
+          var F = $('#stf'), E0 = F.elements;
+          var sync = function () {
+            var ro = r.roles.filter(function (x) { return x.code === E0.role.value; })[0];
+            $('#depBox').style.display = ro && ro.shop_scoped ? '' : 'none';
+            var pin = (F.querySelector('input[name=step]:checked') || {}).value === 'pin';
+            $$('.pinF', F).forEach(function (l) { l.style.display = pin ? '' : 'none'; l.querySelector('input').required = pin; });
+          };
+          F.onchange = sync; sync();
+          F.onsubmit = function (e) { e.preventDefault(); var E = e.target.elements;
+            var step = (F.querySelector('input[name=step]:checked') || {}).value;
+            if (!step) { toast('Choose PIN or authenticator app'); return; }
+            if (step === 'pin' && E.pin.value !== E.pin2.value) { toast('The two PINs are not the same'); return; }
+            var ro = r.roles.filter(function (x) { return x.code === E.role.value; })[0];
+            var body = { username: E.username.value.trim(), displayName: E.displayName.value.trim(), email: '', roles: [E.role.value], shops: ro && ro.shop_scoped ? vals(F, 'shop') : [], temporaryPassword: E.pw.value, secondStep: step };
+            if (step === 'pin') body.pin = E.pin.value;
+            SCG.api('POST', '/admin/staff', body)
+              .then(function () { toast('Staff account created. Sign in with the username ' + body.username); closeModal(); route(); }, fail); };
         };
         $('#siF').onsubmit = function (e) { e.preventDefault(); var mode = (e.target.querySelector('input[name=mode]:checked') || {}).value;
           SCG.api('PUT', '/admin/sign-in', { secondStep: mode }).then(function () { toast(mode === 'pin' ? 'Staff now sign in with password + PIN' : 'Staff now sign in with password + authenticator app'); route(); }, fail); };
@@ -1854,6 +1880,7 @@
           var b = e.target.closest('[data-edit]'); if (!b) return;
           var u = r.staff.filter(function (x) { return x.id === b.dataset.edit; })[0];
           openModal('Edit ' + u.username, '<form class="form" id="stf"><label class="full">Full name<input name="displayName" required value="' + esc(u.display_name) + '"></label><div class="full"><b>Roles</b><br>' + roleBoxes(u.roles) + '</div><div class="full"><b>Departments</b><br>' + shopBoxes(u.shops) + '</div>' +
+            stepRadios(stepOf(u)) +
             '<label>Status<select name="status"><option value="active"' + (u.status === 'active' ? ' selected' : '') + '>Active</option><option value="disabled"' + (u.status === 'disabled' ? ' selected' : '') + '>Disabled (cannot sign in)</option></select></label>' +
             '<label>Reset password (optional, 12+)<input name="pw" minlength="12" placeholder="Leave blank to keep"></label><label class="chk full"><input type="checkbox" name="unlock"> Unlock after too many wrong passwords</label>' +
             '<div class="full"><b>Extra access</b> <small class="muted">(on top of the roles; only you, the main admin, can give it)</small><br>' + ac.permissions.map(function (p) {
@@ -1863,9 +1890,12 @@
             '<div class="form-foot"><button class="btn primary">Save</button></div></form>');
           $('#stf').onsubmit = function (ev) { ev.preventDefault(); var E = ev.target.elements, body = { displayName: E.displayName.value.trim(), roles: vals(ev.target, 'role'), shops: vals(ev.target, 'shop'), status: E.status.value, unlock: E.unlock.checked };
             if (E.pw.value) body.resetPassword = E.pw.value;
+            var st = (ev.target.querySelector('input[name=step]:checked') || {}).value;
+            if (st && st !== stepOf(u)) body.secondStep = st;
+            var needPin = st === 'pin' && withPin.indexOf(u.id) < 0;
             var extra = vals(ev.target, 'extra');   // (Delete is a separate button below)
             SCG.api('PUT', '/admin/staff/' + u.id, body).then(function () { return SCG.api('PUT', '/admin/staff/' + u.id + '/access', { permissions: extra }); })
-              .then(function () { toast('Saved'); closeModal(); route(); }, fail); };
+              .then(function () { toast(needPin ? 'Saved. Now give ' + u.username + ' a PIN with “Set PIN”.' : 'Saved'); closeModal(); route(); }, fail); };
           var del = $('#stDel');
           if (del) del.onclick = function () {
             var typed = prompt('This cannot be undone. Type the username  ' + u.username + '  to delete the account:', '');
@@ -1912,7 +1942,7 @@
             '<td><label class="switch"><input type="checkbox" data-cp="' + c.id + '"' + (c.active ? ' checked' : '') + ' aria-label="Promo code ' + esc(c.code) + ' is active"><i></i></label></td></tr>'; }).join('') : '<tr><td colspan="6" class="muted">No promo codes yet.</td></tr>') + '</tbody></table></div></div>';
         v.onchange = function (e) { var c = e.target.closest('[data-cp]'); if (c) SCG.api('PUT', '/admin/coupons/' + c.dataset.cp, { active: c.checked }).then(function () { toast('Saved'); }, fail); };
         $('#addCp').onclick = function () {
-          openModal('New promo code', '<form class="form" id="cpf"><label>Code<input name="code" required pattern="[A-Za-z0-9_-]{3,30}" placeholder="e.g. NEWYEAR10"></label><label>Type<select name="kind"><option value="percent">% off</option><option value="fixed">Fixed amount off</option></select></label>' +
+          openModal('New promo code', '<form class="form" id="cpf"><label>Code<input name="code" required pattern="[A-Za-z0-9_\\-]{3,30}" placeholder="e.g. NEWYEAR10"></label><label>Type<select name="kind"><option value="percent">% off</option><option value="fixed">Fixed amount off</option></select></label>' +
             '<label>Value<input name="value" type="number" min="1" required></label><label>Minimum order (Rs.)<input name="min" type="number" min="0" value="0"></label><label>Max uses (optional)<input name="max" type="number" min="1"></label><label>Ends (optional)<input name="ends" type="datetime-local"></label>' +
             '<div class="form-foot"><button class="btn primary">Create</button></div></form>');
           $('#cpf').onsubmit = function (e) { e.preventDefault(); var E = e.target.elements, body = { code: E.code.value.trim(), kind: E.kind.value, value: +E.value.value, minSubtotal: +E.min.value || 0 };

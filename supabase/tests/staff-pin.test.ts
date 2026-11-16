@@ -85,3 +85,48 @@ describe('admin PIN (second sign-in step)', () => {
     expect((await rpc(s, 'staff_verify_pin', { p_pin: '3170' })).error?.message).toMatch(/not switched on/);
   });
 });
+
+describe('each person can have their own second step (PIN or authenticator app)', () => {
+  const step = (u: string, v: string) => rpc(owner, 'admin_staff_save', { p_staff_id: u, p_data: { secondStep: v } });
+  const mfa = (on: boolean) => db().query(`UPDATE app.security_settings SET require_staff_mfa = $1`, [on]);
+
+  it('a person set to PIN is asked for the PIN even when the shop default is the app, and the other way round', async () => {
+    await mfa(false); await db().query(`UPDATE app.security_settings SET staff_second_step = 'totp'`);
+    expect((await step(editorId, 'sms')).error?.message).toMatch(/PIN or authenticator/);
+    expect((await step(editorId, 'pin')).error).toBeNull();
+    expect((await rpc(owner, 'admin_staff_list')).data.staff.find((x: any) => x.id === editorId).second_step).toBe('pin');
+    await mfa(true);
+    const s = await staff('editor1');
+    expect((await rpc(s, 'admin_me')).data).toMatchObject({ secondStep: 'pin', secondStepOk: false });
+    expect((await rpc(s, 'admin_state')).error?.hint).toBe('pin_required');
+    expect((await rpc(s, 'staff_verify_pin', { p_pin: '3170' })).data).toEqual({ ok: true });
+    expect((await rpc(s, 'admin_state')).error).toBeNull();
+
+    await mfa(false); await db().query(`UPDATE app.security_settings SET staff_second_step = 'pin'`);
+    expect((await step(editorId, 'totp')).error).toBeNull();
+    await mfa(true);
+    const t = await staff('editor1');
+    expect((await rpc(t, 'admin_me')).data.secondStep).toBe('totp');
+    expect((await rpc(t, 'staff_verify_pin', { p_pin: '3170' })).error?.message).toMatch(/not switched on/);
+    expect((await rpc(t, 'admin_state')).error?.hint).toBe('mfa_required');
+
+    await mfa(false); expect((await step(editorId, '')).error).toBeNull();   // empty = follow the shop default again
+    expect((await q1(`SELECT second_step FROM app.staff_users WHERE id = $1`, [editorId])).second_step).toBeNull();
+    await mfa(true);
+    expect((await rpc(await staff('editor1'), 'admin_me')).data.secondStep).toBe('pin');
+    await mfa(false); await db().query(`UPDATE app.security_settings SET staff_second_step = 'totp'`);
+  });
+
+  it('the owner cannot lock themselves out by changing their own second step', async () => {
+    await mfa(false);
+    await db().query(`DELETE FROM app.staff_pins WHERE staff_id = $1`, [ownerId]);
+    expect((await step(ownerId, 'pin')).error?.message).toMatch(/own PIN/);
+    expect((await rpc(owner, 'admin_set_staff_pin', { p_staff_id: ownerId, p_pin: '5081' })).error).toBeNull();
+    expect((await step(ownerId, 'pin')).error).toBeNull();
+    await mfa(true);
+    expect((await rpc(owner, 'admin_state')).error).toBeNull();   // this session stays open
+    expect((await step(ownerId, 'totp')).error?.message).toMatch(/lock you out/);   // signed in without the app this time
+    await mfa(false);
+    await db().query(`UPDATE app.staff_users SET second_step = NULL`);
+  });
+});

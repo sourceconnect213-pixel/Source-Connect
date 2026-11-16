@@ -1,8 +1,8 @@
 // POST /functions/v1/admin-staff — staff accounts (needs the caller's Supabase Auth token).
 // The caller's permission (staff.manage) is checked by the DATABASE using the caller's own token;
 // the service role is used only for the Supabase Auth admin calls that a browser can never make.
-//   {action:"create", username, displayName, email, roles[], shops[], temporaryPassword}
-//   {action:"update", id, displayName?, roles?, shops?, status?, resetPassword?}
+//   {action:"create", username, displayName, email?, roles[], shops[], temporaryPassword, secondStep?: "pin"|"totp", pin?}
+//   {action:"update", id, displayName?, roles?, shops?, status?, secondStep?, resetPassword?}
 //   {action:"change-own-password", currentPassword, newPassword}   (any staff member, clears the temporary-password flag)
 //   {action:"delete", id}   (main admin; rules checked in the database first, then the sign-in account is removed)
 import { clientIp, dbError, env, json, preflight, rateLimited, readBody, rpc, userFrom } from '../_shared/common.ts';
@@ -47,6 +47,12 @@ Deno.serve(async (req) => {
     if (!pre.ok) return dbError(req, pre);
     const problem = passwordProblem(b.temporaryPassword, b.username);
     if (problem) return json(req, 400, { error: 'bad_request', message: problem });
+    if (b.secondStep !== undefined && b.secondStep !== 'pin' && b.secondStep !== 'totp') return json(req, 400, { error: 'bad_request', message: 'Choose PIN or authenticator app.' });
+    if (b.secondStep === 'pin') {   // checked before anything is created (the database checks the same again)
+      const pin = String(b.pin ?? '');
+      if (!/^[0-9]{4,8}$/.test(pin)) return json(req, 400, { error: 'bad_request', message: 'The PIN must be 4 to 8 digits.' });
+      if (/^(.)\1+$/.test(pin) || '0123456789'.includes(pin) || '9876543210'.includes(pin)) return json(req, 400, { error: 'bad_request', message: 'That PIN is too easy to guess (same digit or 1234-style). Choose another.' });
+    }
     const email = String(b.email || `${b.username}@staff.invalid`).trim().toLowerCase();
     const cu = await admin('/users', 'POST', { email, password: b.temporaryPassword, email_confirm: true, app_metadata: { kind: 'staff', must_change_password: true } });
     const created = await cu.json();
@@ -56,14 +62,24 @@ Deno.serve(async (req) => {
         ? 'That email is already used by another account. One email can have only one account. For a second account that arrives in the same Gmail inbox, add + and a word before the @, for example yourname+coadmin@gmail.com. Or leave the email empty: the person then signs in with the username.'
         : created?.msg ?? 'Could not create the sign-in account.' });
     }
-    const s = await rpc('admin_staff_save', { p_staff_id: created.id, p_data: { username: b.username, displayName: b.displayName, email: b.email || '', roles: b.roles, shops: b.shops ?? [] } }, caller.token);
+    const data: Record<string, unknown> = { username: b.username, displayName: b.displayName, email: b.email || '', roles: b.roles, shops: b.shops ?? [] };
+    if (b.secondStep) data.secondStep = b.secondStep;
+    const s = await rpc('admin_staff_save', { p_staff_id: created.id, p_data: data }, caller.token);
     if (!s.ok) { await admin(`/users/${created.id}`, 'DELETE'); return dbError(req, s); }   // undo: no half-created accounts
+    if (b.secondStep === 'pin') {
+      const p = await rpc('admin_set_staff_pin', { p_staff_id: created.id, p_pin: String(b.pin) }, caller.token);
+      if (!p.ok) {   // undo everything, so the owner can simply try again
+        await rpc('admin_staff_delete', { p_staff_id: created.id }, caller.token);
+        await admin(`/users/${created.id}`, 'DELETE');
+        return dbError(req, p);
+      }
+    }
     return json(req, 200, { id: created.id });
   }
 
   if (b?.action === 'update' && typeof b.id === 'string') {
     const data: Record<string, unknown> = {};
-    for (const k of ['displayName', 'roles', 'shops', 'status']) if (b[k] !== undefined) data[k] = b[k];
+    for (const k of ['displayName', 'roles', 'shops', 'status', 'secondStep']) if (b[k] !== undefined) data[k] = b[k];
     const s = await rpc('admin_staff_save', { p_staff_id: b.id, p_data: data }, caller.token);   // permission + validation in the database
     if (!s.ok) return dbError(req, s);
     const cur = await (await admin(`/users/${b.id}`, 'GET')).json();

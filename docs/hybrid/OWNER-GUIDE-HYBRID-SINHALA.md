@@ -95,4 +95,11 @@
 - Ita passe main admin eka **Staff & Roles → Access requests** eken eka **Approve** hari **Decline** hari karanawa.
 - Main admin ta **Staff & Roles → Edit → Extra access** eken kelinma access denna puluwan. Ona welawaka tick eka ain karala aye ganna puluwan.
 - "Staff & Roles" (anith ayata access denna) kisi dawasaka co-admin kenekta denna bæ. Me sima eka hadala thiyenne database eke — e nisa browser eken maga harinna bæ.
-- Aluth co-admin kenek hadanna: **Staff & Roles → + Add staff** → Roles yatathe **Co-Admin (store)** tick karanna.
+- Aluth kenek hadanna: **Staff & Roles → + Add staff** →
+  - **Full name** (account eka use karana kenage nama),
+  - **Username** (log wenna),
+  - **Password** (akuru + ankath, akuru 12+),
+  - **Role** (default **Co-Admin (store)**),
+  - **Verify with**: **PIN** (ankath 4–8, dekaparak) hari **Authenticator app**.
+  Email ona nê. E kena log wenne username + password eken, ita passe PIN eka hari app code eka hari. Palamu login eke password eka wenas karanna kiyanawa.
+- Ekama kenekuge verify krama eka passe wenas karanna: **Edit → Verify with**. Oyage ma account eke lock wenna puluwan wenas kirima system eka nawaththanawa.

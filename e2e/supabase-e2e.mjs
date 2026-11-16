@@ -372,6 +372,46 @@ check('own account has no delete button', await ap.evaluate(async () => { locati
   const row = [...document.querySelectorAll('#view tr')].find(tr => /ownere2e/.test(tr.textContent)); row.querySelector('[data-edit]').click(); await new Promise(r => setTimeout(r, 500));
   const none = !document.getElementById('stDel'); document.getElementById('modal').classList.remove('open'); return none; }));
 
+// 10c. Add staff: only full name, username, password, role and how to verify (PIN here). The person signs in with the username.
+sql(`DELETE FROM app.staff_users WHERE username = 'shopstaff'`); sql(`DELETE FROM auth.users WHERE email = 'shopstaff@staff.invalid'`);
+sql(`UPDATE app.security_settings SET require_staff_mfa = true, staff_second_step = 'totp'`);   // shop default stays the app; this person gets PIN
+await ap.evaluate(() => { location.hash = 'dashboard'; }); await ap.waitForTimeout(600);
+await ap.evaluate(() => { location.hash = 'staff'; }); await ap.waitForSelector('#addStaff', { timeout: 15000 }); await ap.waitForSelector('#view table');
+await ap.click('#addStaff'); await ap.waitForSelector('#stf [name=displayName]');
+check('add staff form: no email field', !(await ap.$('#stf [name=email]')));
+check('add staff form: co-admin is the default role', (await ap.inputValue('#stf [name=role]')) === 'co_admin');
+await ap.check('#stf input[name=step][value=totp]');
+check('PIN boxes hidden when the authenticator app is chosen', await ap.isHidden('#stf [name=pin]'));
+await ap.check('#stf input[name=step][value=pin]');
+check('PIN boxes shown when PIN is chosen', await ap.isVisible('#stf [name=pin]'));
+await ap.screenshot({ path: OUT + '/sb-admin-add-staff.jpg', type: 'jpeg', quality: 70 });
+await ap.setViewportSize({ width: 390, height: 844 }); await ap.waitForTimeout(300);
+check('add staff form on a phone: no sideways scrolling', (await ap.evaluate(() => document.documentElement.scrollWidth - innerWidth)) <= 1);
+await ap.screenshot({ path: OUT + '/sb-admin-add-staff-phone.jpg', type: 'jpeg', quality: 70 });
+await ap.setViewportSize({ width: 1366, height: 900 });
+await ap.fill('#stf [name=displayName]', 'Shop Staff Person'); await ap.fill('#stf [name=username]', 'shopstaff'); await ap.fill('#stf [name=pw]', 'Temp-Shop-2026x');
+await ap.fill('#stf [name=pin]', '4826'); await ap.fill('#stf [name=pin2]', '4827'); await ap.click('#stf button.primary'); await ap.waitForTimeout(800);
+check('two different PINs: nothing is created', sql(`SELECT count(*) FROM app.staff_users WHERE username = 'shopstaff'`) === '0');
+await ap.fill('#stf [name=pin2]', '4826'); await ap.click('#stf button.primary'); await ap.waitForTimeout(3000);
+check('staff created with full name, co-admin role and PIN sign-in',
+  sql(`SELECT u.display_name || '|' || u.second_step || '|' || (SELECT string_agg(r.code, ',') FROM app.staff_roles sr JOIN app.roles r ON r.id = sr.role_id WHERE sr.staff_id = u.id) || '|' || (SELECT count(*) FROM app.staff_pins p WHERE p.staff_id = u.id) FROM app.staff_users u WHERE u.username = 'shopstaff'`) === 'Shop Staff Person|pin|co_admin|1');
+check('staff list shows how the person verifies', /shopstaff · PIN/.test(await ap.textContent('#view')));
+const nsC = await ctx(); const np = await page(nsC, 'new-staff');
+await np.goto(withSb('admin/')); await np.waitForSelector('input[name=user]');
+await np.fill('input[name=user]', 'shopstaff'); await np.fill('input[name=pass]', 'Temp-Shop-2026x'); await np.click('#loginForm button:not(.pw-eye)');
+await np.waitForSelector('#loginForm input[name=cur]', { timeout: 15000 });
+check('new staff signs in with the username (then sets their own password)', true);
+await np.fill('#loginForm [name=cur]', 'Temp-Shop-2026x'); await np.fill('#loginForm [name=pw]', 'Own-Shop-Pass-77'); await np.click('#loginForm button.primary');
+await np.waitForSelector('input[name=user]', { timeout: 20000 });
+await np.fill('input[name=user]', 'shopstaff'); await np.fill('input[name=pass]', 'Own-Shop-Pass-77'); await np.click('#loginForm button:not(.pw-eye)');
+await np.waitForSelector('#loginForm input[name=pin]', { timeout: 15000 });
+check('this person is asked for the PIN (shop default is the app)', !(await np.$('#mfaQr')));
+await np.fill('#loginForm input[name=pin]', '4826'); await np.click('#pinGo');
+await np.waitForSelector('#shell:not([hidden])', { timeout: 20000 }); await np.waitForTimeout(1200);
+check('PIN opens the admin with the co-admin menu', await np.isVisible('#sideNav a[data-v=reports]') && !(await np.isVisible('#sideNav a[data-v=staff]')));
+await nsC.close();
+sql(`UPDATE app.security_settings SET require_staff_mfa = false`);
+
 // 11. usage page (main admin)
 await ap.evaluate(() => { location.hash = 'usage'; }); await ap.waitForSelector('.use-row', { timeout: 15000 });
 const use = await ap.$$eval('.use-row .use-head', l => l.map(x => x.textContent.replace(/\s+/g, ' ').trim()));
