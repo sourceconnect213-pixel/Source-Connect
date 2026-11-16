@@ -1420,7 +1420,15 @@
     // hide menu items this person cannot use
     var NEED = { dashboard: 'dashboard.view', orders: 'orders.read', customers: 'customers.read', products: 'catalog.read', flash: 'content.write', categories: 'catalog.write', origins: 'settings.write',
       collections: 'catalog.read', homepage: 'content.write', banners: 'content.write', header: 'content.write', pages: 'content.write', settings: 'content.write', editor: 'catalog.read',
-      staff: 'staff.manage', audit: 'audit.read', backups: 'backups.read', coupons: 'settings.write', reports: 'reports.view', renewals: 'renewals.manage' };
+      staff: 'staff.manage', audit: 'audit.read', backups: 'backups.read', coupons: 'coupons.manage', reports: 'reports.view', renewals: 'renewals.manage', access: 'dashboard.view' };
+    // plain names for what can be asked for / given on top of a role
+    var PERM_NAME = { 'dashboard.view': 'Dashboard', 'reports.view': 'Sales & profit reports', 'costs.write': 'Cost prices', 'catalog.read': 'See products',
+      'catalog.write': 'Add and edit products, photos, categories and collections', 'inventory.adjust': 'Change stock', 'orders.read': 'See orders',
+      'orders.update': 'Change order and shipment status', 'payments.read': 'See payment details', 'payments.verify': 'Confirm bank transfers and cash collected',
+      'refunds.create': 'Refunds and cancelling paid orders', 'customers.read': 'See customer names, phones and addresses', 'customers.write': 'Edit or disable customer accounts',
+      'content.write': 'Banners, homepage, header/footer, pages and flash sale', 'settings.write': 'Delivery fees, payment options and import countries',
+      'coupons.manage': 'Promo codes', 'audit.read': 'Audit log', 'backups.read': 'Backup status', 'renewals.manage': 'Renewal reminders' };
+    var permName = function (c, d) { return PERM_NAME[c] || d || c; };
     function applyPermissions() {
       var nav = $('#sideNav');
       if (!$('#sideNav [data-v=reports]')) {
@@ -1433,12 +1441,40 @@
           '<a href="#staff" data-v="staff"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2 20c1-4 4-6 7-6s6 2 7 6M17 11l2 2 4-4"/></svg>Staff &amp; Roles</a>' +
           '<a href="#audit" data-v="audit"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6zM9 12h7M9 16h7M9 8h3"/></svg>Audit Log</a>' +
           '<a href="#backups" data-v="backups"><svg viewBox="0 0 24 24"><path d="M4 7c0-2 16-2 16 0v10c0 2-16 2-16 0zM4 7c0 2 16 2 16 0M4 12c0 2 16 2 16 0"/></svg>Backups <span class="pill" id="bkPill"></span></a>' +
-          '<a href="#renewals" data-v="renewals"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M12 14v3l2 1"/></svg>Renewals <span class="pill" id="rnPill"></span></a>');
+          '<a href="#renewals" data-v="renewals"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M12 14v3l2 1"/></svg>Renewals <span class="pill" id="rnPill"></span></a>' +
+          '<a href="#access" data-v="access"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>My Access</a>');
+        var st = $('#sideNav a[data-v=staff]'); if (st) st.insertAdjacentHTML('beforeend', ' <span class="pill" id="acPill"></span>');
       }
       $$('#sideNav a[data-v]').forEach(function (a) { var p = NEED[a.dataset.v]; a.hidden = !!(p && !can(p)); });
-      var who = $('.side-brand small'); if (who && me) who.textContent = (me.displayName || me.username).toUpperCase();
-      checkRenewals();
+      var who = $('.side-brand small'); if (who && me) who.textContent = (me.displayName || me.username).toUpperCase() + ' · ' + (me.mainAdmin ? 'MAIN ADMIN' : 'CO-ADMIN');
+      checkRenewals(); checkAccessRequests();
     }
+    // main admin: how many access requests wait for an answer (shown on "Staff & Roles")
+    function checkAccessRequests() {
+      if (!me || !can('staff.manage')) return;
+      SCG.api('GET', '/admin/access').then(function (d) { var p = $('#acPill'); if (p) p.textContent = d.pending ? String(d.pending) : ''; }, function () {});
+    }
+
+    // ---------- my access: what I may do, and asking the main admin for more ----------
+    VIEWS.access = { title: 'My Access', sub: 'What you can do here, and asking the main admin for more', render: function (v) {
+      v.innerHTML = '<p class="muted">Loading…</p>';
+      var h0 = location.hash;
+      SCG.api('GET', '/admin/access/mine').then(function (d) { if (location.hash !== h0) return;
+        var have = d.permissions.filter(function (p) { return p.have; }), other = d.permissions.filter(function (p) { return !p.have; });
+        var stat = { pending: '<span class="tag warn">waiting for approval</span>', approved: '<span class="tag ok">approved</span>', rejected: '<span class="tag red">not approved</span>', withdrawn: '<span class="tag">withdrawn</span>' };
+        v.innerHTML = (me.mainAdmin ? '<div class="panel"><p style="margin:0"><b>You are the main admin.</b> You can do everything. Requests from co-admins appear on <a href="#staff">Staff &amp; Roles</a>.</p></div>' : '') +
+          '<div class="panel"><h3>You can</h3><div class="filters">' + have.map(function (p) { return '<span class="tag ok">' + esc(permName(p.code, p.description)) + (p.viaRole ? '' : ' (approved)') + '</span>'; }).join('') + '</div></div>' +
+          (other.length ? '<div class="panel"><h3>Ask for more <small>the main admin approves or declines</small></h3>' + other.map(function (p) {
+            return '<div class="sum-row"><span>' + esc(permName(p.code, p.description)) + '</span>' + (p.pending ? stat.pending : '<button class="btn sm" data-ask="' + esc(p.code) + '">Request access</button>') + '</div>'; }).join('') + '</div>' : '') +
+          (d.requests.length ? '<div class="panel"><h3>My requests</h3>' + d.requests.map(function (r) {
+            return '<div class="sum-row"><span>' + esc(permName(r.permission)) + (r.decisionNote ? ' <small class="muted">— ' + esc(r.decisionNote) + '</small>' : '') + '</span><span>' + (stat[r.status] || esc(r.status)) + '</span></div>'; }).join('') + '</div>' : '');
+        v.onclick = function (e) {
+          var b = e.target.closest('[data-ask]'); if (!b) return;
+          var note = prompt('Why do you need "' + permName(b.dataset.ask) + '"? (optional, the main admin sees this)', ''); if (note === null) return;
+          SCG.api('POST', '/admin/access/requests', { permission: b.dataset.ask, note: note.slice(0, 300) }).then(function () { toast('Request sent to the main admin'); route(); }, fail);
+        };
+      }, function (err) { if (location.hash !== h0) return; v.innerHTML = '<p class="muted">' + esc(err.message) + '</p>'; });
+    } };
 
     // ---------- service renewals (owner): warning banner on every page from N days before the date ----------
     var rnTimer = null;
@@ -1717,11 +1753,18 @@
       setActions('<button class="btn primary" id="addStaff">+ Add staff</button>');
       v.innerHTML = '<p class="muted">Loading…</p>';
       var h0 = location.hash;   // draw only if the person is still on this page
-      Promise.all([SCG.api('GET', '/admin/staff'), SCG.api('GET', '/admin/sign-in')]).then(function (both) { if (location.hash !== h0) return;
-        var r = both[0], si = both[1], withPin = si.withPin || [];
+      Promise.all([SCG.api('GET', '/admin/staff'), SCG.api('GET', '/admin/sign-in'), SCG.api('GET', '/admin/access')]).then(function (both) { if (location.hash !== h0) return;
+        var r = both[0], si = both[1], withPin = si.withPin || [], ac = both[2];
+        var pend = ac.requests.filter(function (q) { return q.status === 'pending'; });
+        var reqHTML = '<div class="panel" id="acReq"><h3>Access requests <small>' + (pend.length ? pend.length + ' waiting' : 'nothing waiting') + '</small></h3>' +
+          (pend.length ? pend.map(function (q) { return '<div class="sum-row"><span><b>' + esc(q.name) + '</b> <small class="muted">' + esc(q.username) + '</small> asks for <b>' + esc(permName(q.permission, q.description)) + '</b>' +
+            (q.note ? '<br><small class="muted">“' + esc(q.note) + '”</small>' : '') + '</span><span style="white-space:nowrap"><button class="btn sm primary" data-acc="' + q.id + '">Approve</button> <button class="btn sm danger" data-rej="' + q.id + '">Decline</button></span></div>'; }).join('')
+            : '<p class="muted" style="margin:0">When a co-admin asks for more access, it appears here for you to approve or decline.</p>') + '</div>';
+        var pc = $('#acPill'); if (pc) pc.textContent = pend.length ? String(pend.length) : '';
         var shops = (db.shops || []).map(function (s) { return s.id; });
-        v.innerHTML = '<div class="panel" style="padding:0"><div class="table-wrap"><table class="table"><thead><tr><th>Name</th><th>Roles</th><th>Departments</th><th>Status</th><th>Last sign-in</th><th></th></tr></thead><tbody>' + r.staff.map(function (u) {
-          return '<tr><td><b>' + esc(u.display_name) + '</b><br><small class="muted">' + esc(u.username) + '</small></td><td>' + u.roles.map(esc).join(', ') + '</td><td>' + (u.shops.length ? u.shops.map(esc).join(', ') : 'All') + '</td><td>' + esc(u.status) + (u.locked_until && new Date(u.locked_until) > new Date() ? ' · locked' : '') + (u.must_change_password ? ' · temp password' : '') + '</td><td><small>' + when(u.last_login_at) + '</small></td>' +
+        v.innerHTML = reqHTML + '<div class="panel" style="padding:0"><div class="table-wrap"><table class="table"><thead><tr><th>Name</th><th>Roles</th><th>Departments</th><th>Status</th><th>Last sign-in</th><th></th></tr></thead><tbody>' + r.staff.map(function (u) {
+          var ex = ac.extra[u.id] || [];
+          return '<tr><td><b>' + esc(u.display_name) + '</b><br><small class="muted">' + esc(u.username) + '</small></td><td>' + u.roles.map(esc).join(', ') + (ex.length ? '<br><small class="muted">+ approved: ' + ex.map(function (c) { return esc(permName(c)); }).join(', ') + '</small>' : '') + '</td><td>' + (u.shops.length ? u.shops.map(esc).join(', ') : 'All') + '</td><td>' + esc(u.status) + (u.locked_until && new Date(u.locked_until) > new Date() ? ' · locked' : '') + (u.must_change_password ? ' · temp password' : '') + '</td><td><small>' + when(u.last_login_at) + '</small></td>' +
             '<td style="white-space:nowrap"><button class="btn sm" data-edit="' + u.id + '">Edit</button> <button class="btn sm" data-pin="' + u.id + '">' + (withPin.indexOf(u.id) > -1 ? 'Change PIN' : 'Set PIN') + '</button></td></tr>';
         }).join('') + '</tbody></table></div></div>' +
         '<div class="panel"><h3>Second sign-in step <small>asked after the password</small></h3><form class="form" id="siF">' +
@@ -1744,6 +1787,13 @@
         $('#siF').onsubmit = function (e) { e.preventDefault(); var mode = (e.target.querySelector('input[name=mode]:checked') || {}).value;
           SCG.api('PUT', '/admin/sign-in', { secondStep: mode }).then(function () { toast(mode === 'pin' ? 'Staff now sign in with password + PIN' : 'Staff now sign in with password + authenticator app'); route(); }, fail); };
         v.onclick = function (e) {
+          var ab = e.target.closest('[data-acc],[data-rej]');
+          if (ab) {
+            var yes = ab.hasAttribute('data-acc'), id = ab.dataset.acc || ab.dataset.rej;
+            var note = prompt(yes ? 'Approve. A note for the person (optional):' : 'Decline. Tell them why (optional):', ''); if (note === null) return;
+            SCG.api('POST', '/admin/access/requests/' + id, { approve: yes, note: note.slice(0, 300) }).then(function () { toast(yes ? 'Approved' : 'Declined'); route(); }, fail);
+            return;
+          }
           var pb = e.target.closest('[data-pin]');
           if (pb) {
             var pu = r.staff.filter(function (x) { return x.id === pb.dataset.pin; })[0], has = withPin.indexOf(pu.id) > -1;
@@ -1763,10 +1813,15 @@
           openModal('Edit ' + u.username, '<form class="form" id="stf"><label class="full">Full name<input name="displayName" required value="' + esc(u.display_name) + '"></label><div class="full"><b>Roles</b><br>' + roleBoxes(u.roles) + '</div><div class="full"><b>Departments</b><br>' + shopBoxes(u.shops) + '</div>' +
             '<label>Status<select name="status"><option value="active"' + (u.status === 'active' ? ' selected' : '') + '>Active</option><option value="disabled"' + (u.status === 'disabled' ? ' selected' : '') + '>Disabled (cannot sign in)</option></select></label>' +
             '<label>Reset password (optional, 12+)<input name="pw" minlength="12" placeholder="Leave blank to keep"></label><label class="chk full"><input type="checkbox" name="unlock"> Unlock after too many wrong passwords</label>' +
+            '<div class="full"><b>Extra access</b> <small class="muted">(on top of the roles; only you, the main admin, can give it)</small><br>' + ac.permissions.map(function (p) {
+              var viaRole = r.roles.some(function (ro) { return u.roles.indexOf(ro.code) > -1 && (ro.permissions || []).indexOf(p.code) > -1; });
+              return viaRole ? '' : '<label class="chk"><input type="checkbox" name="extra" value="' + esc(p.code) + '"' + ((ac.extra[u.id] || []).indexOf(p.code) > -1 ? ' checked' : '') + '> ' + esc(permName(p.code, p.description)) + '</label>'; }).join('') + '</div>' +
             '<div class="form-foot"><button class="btn primary">Save</button></div></form>');
           $('#stf').onsubmit = function (ev) { ev.preventDefault(); var E = ev.target.elements, body = { displayName: E.displayName.value.trim(), roles: vals(ev.target, 'role'), shops: vals(ev.target, 'shop'), status: E.status.value, unlock: E.unlock.checked };
             if (E.pw.value) body.resetPassword = E.pw.value;
-            SCG.api('PUT', '/admin/staff/' + u.id, body).then(function () { toast('Saved'); closeModal(); route(); }, fail); };
+            var extra = vals(ev.target, 'extra');
+            SCG.api('PUT', '/admin/staff/' + u.id, body).then(function () { return SCG.api('PUT', '/admin/staff/' + u.id + '/access', { permissions: extra }); })
+              .then(function () { toast('Saved'); closeModal(); route(); }, fail); };
         };
       }, function (err) { if (location.hash !== h0) return; v.innerHTML = '<p class="muted">' + esc(err.message) + '</p>'; });
     } };

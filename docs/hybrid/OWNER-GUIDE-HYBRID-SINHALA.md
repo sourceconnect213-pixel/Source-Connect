@@ -86,3 +86,13 @@
 - හොඳම ප්‍රමාණ: **1920 × 1080** (16:9) හෝ තුනී strip එකක් නම් **1920 × 600**. ඕනෑම හැඩයක් හරියට fit වෙනවා. වැදගත් අකුරු පින්තූරයේ කෙළවරටම දාන්න එපා.
 - Upload කරද්දී පින්තූරය 1920px වෙනකම් තියාගන්නවා, ඒ නිසා අකුරු පැහැදිලියි. පොඩි පින්තූරයක් ලොකු කරන්නේ නෑ.
 - පරණ විදියේ banners (website එක අකුරු ලියන ඒවා) වෙනසක් නැතුව තියෙනවා.
+
+## Main admin saha Co-admin
+
+- **Main admin** (role: Owner) — siyalu dewal karanna puluwan. Staff accounts hadanne, access approve karanne main admin witharai.
+- **Co-admin** (role: Co-Admin (store)) — store eka karana aya. Karanna puluwan dewal witharai: Sales & Profit, cost prices, products (adum) saha ewaye pinthura, stock, banners, homepage, flash sale offers, promo codes.
+- Co-admin ta thawa deyak ona nam (udaharanayak: orders balanna), admin eke **My Access → Request access** obanawa.
+- Ita passe main admin eka **Staff & Roles → Access requests** eken eka **Approve** hari **Decline** hari karanawa.
+- Main admin ta **Staff & Roles → Edit → Extra access** eken kelinma access denna puluwan. Ona welawaka tick eka ain karala aye ganna puluwan.
+- "Staff & Roles" (anith ayata access denna) kisi dawasaka co-admin kenekta denna bæ. Me sima eka hadala thiyenne database eke — e nisa browser eken maga harinna bæ.
+- Aluth co-admin kenek hadanna: **Staff & Roles → + Add staff** → Roles yatathe **Co-Admin (store)** tick karanna.

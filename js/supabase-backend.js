@@ -184,7 +184,8 @@
         return { staff: { username: s.username, displayName: s.displayName, roles: s.roles, permissions: s.permissions, mustChangePassword: !!s.mustChangePassword,
           // second sign-in step: authenticator app (default) or the owner-set admin PIN; the database decides (secondStepOk)
           needsMfa: !!(s.mfaRequired && (s.secondStepOk === undefined ? s.aal !== 'aal2' : !s.secondStepOk) && s.secondStep !== 'pin'),
-          needsPin: !!(s.mfaRequired && s.secondStepOk === false && s.secondStep === 'pin'), hasPin: !!s.hasPin, allShops: s.shops === null } };
+          needsPin: !!(s.mfaRequired && s.secondStepOk === false && s.secondStep === 'pin'), hasPin: !!s.hasPin, allShops: s.shops === null,
+          mainAdmin: !!s.mainAdmin, extra: s.extra || [] } };
       });
     });
     if (path === '/admin/auth/pin') return rpc('staff_verify_pin', { p_pin: String(body.pin || '') }, 'staff');
@@ -234,6 +235,12 @@
     if (path === '/admin/coupons' && method === 'GET') return rpc('admin_coupons', {}, 'staff');
     if (path === '/admin/coupons' && method === 'POST') return rpc('admin_create_coupon', { p_data: body }, 'staff');
     if ((x = m(/^\/admin\/coupons\/([^/]+)$/, path))) return rpc('admin_set_coupon_active', { p_id: x[1], p_active: !!body.active }, 'staff');
+    // extra access: a staff member asks, the main admin approves (or gives it directly)
+    if (path === '/admin/access/mine') return rpc('admin_my_access', {}, 'staff');
+    if (path === '/admin/access' && method === 'GET') return rpc('admin_access_overview', {}, 'staff');
+    if (path === '/admin/access/requests' && method === 'POST') return rpc('admin_request_access', { p_permission: body.permission, p_note: body.note || '' }, 'staff');
+    if ((x = m(/^\/admin\/access\/requests\/(\d+)$/, path))) return rpc('admin_decide_access', { p_id: +x[1], p_approve: !!body.approve, p_note: body.note || '' }, 'staff');
+    if ((x = m(/^\/admin\/staff\/([0-9a-f-]{36})\/access$/, path))) return rpc('admin_set_extra_access', { p_staff_id: x[1], p_permissions: body.permissions || [] }, 'staff');
     if (path === '/admin/staff' && method === 'GET') return rpc('admin_staff_list', {}, 'staff');
     if (path === '/admin/staff' && method === 'POST') return edge('admin-staff', Object.assign({ action: 'create' }, body), 'staff');
     if (path === '/admin/sign-in' && method === 'GET') return rpc('admin_sign_in_settings', {}, 'staff');

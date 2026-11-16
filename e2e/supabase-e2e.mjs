@@ -326,6 +326,40 @@ const pic = await bp.evaluate(() => ({ drawn: !!document.querySelector('#big svg
 check('a product photo that cannot be loaded is replaced by the drawn product (no broken-picture mark)', pic.drawn && pic.broken === 0, JSON.stringify(pic));
 await bk.close();
 
+// 10. co-admin: only the store work; more only after the main admin approves
+const CO = { email: 'coadmin-e2e@staff.test', password: 'Co-Admin-Pass-2026!' };
+let coId = sql(`SELECT id FROM auth.users WHERE email = '${CO.email}'`);
+if (!coId) {
+  const r = await (await fetch(`${SB}/auth/v1/admin/users`, { method: 'POST', headers: { apikey: SERVICE, authorization: `Bearer ${SERVICE}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ email: CO.email, password: CO.password, email_confirm: true, app_metadata: { kind: 'staff' } }) })).json();
+  coId = r.id;
+  sql(`INSERT INTO app.staff_users (id, username, email, display_name) VALUES ('${coId}', 'coadmine2e', '${CO.email}', 'E2E Co Admin')`);
+  sql(`INSERT INTO app.staff_roles (staff_id, role_id) SELECT '${coId}', id FROM app.roles WHERE code = 'co_admin'`);
+}
+sql(`DELETE FROM app.staff_extra_permissions WHERE staff_id = '${coId}'`); sql(`DELETE FROM app.access_requests WHERE staff_id = '${coId}'`);
+sql(`UPDATE app.security_settings SET require_staff_mfa = false`);   // this account's second sign-in step is tested elsewhere
+const coCtx = await ctx(); const kp = await page(coCtx, 'co-admin');
+await kp.goto(withSb('admin/')); await kp.waitForSelector('input[name=user]');
+await kp.fill('input[name=user]', CO.email); await kp.fill('input[name=pass]', CO.password); await kp.click('#loginForm button:not(.pw-eye)');
+await kp.waitForSelector('#shell:not([hidden])', { timeout: 20000 }); await kp.waitForTimeout(1200);
+const coMenu = await kp.$$eval('#sideNav a[data-v]', l => l.filter(a => !a.hidden).map(a => a.dataset.v));
+check('co-admin menu: sales & profit, products, banners, offers, promo codes', ['reports', 'products', 'banners', 'flash', 'coupons', 'access'].every(x => coMenu.includes(x)), coMenu.join(','));
+check('co-admin menu: no orders, customers, staff, settings of fees, audit, backups, renewals', !['orders', 'customers', 'staff', 'origins', 'audit', 'backups', 'renewals'].some(x => coMenu.includes(x)), coMenu.join(','));
+check('co-admin is labelled as co-admin', /CO-ADMIN/.test(await kp.textContent('.side-brand small')));
+await kp.goto(withSb('admin/#orders')); await kp.waitForTimeout(1500);
+check('co-admin typing the orders address is sent elsewhere', !(await kp.evaluate(() => location.hash)).includes('orders'));
+await kp.goto(withSb('admin/#access')); await kp.waitForSelector('[data-ask="orders.read"]', { timeout: 15000 });
+kp.once('dialog', d => d.accept('to pack orders'));
+await kp.click('[data-ask="orders.read"]'); await kp.waitForTimeout(1500);
+check('co-admin asks for access; it waits for approval', sql(`SELECT status FROM app.access_requests WHERE staff_id = '${coId}' AND permission = 'orders.read'`) === 'pending');
+await ap.evaluate(() => { location.hash = 'staff'; }); await ap.waitForSelector('#acReq [data-acc]', { timeout: 15000 });
+check('main admin sees the request with the reason', /E2E Co Admin[\s\S]*See orders[\s\S]*to pack orders/.test(await ap.textContent('#acReq')));
+ap.once('dialog', d => d.accept('ok')); await ap.click('#acReq [data-acc]'); await ap.waitForTimeout(1500);
+check('approved in the database', sql(`SELECT count(*) FROM app.staff_extra_permissions WHERE staff_id = '${coId}' AND permission = 'orders.read'`) === '1');
+await kp.reload(); await kp.waitForSelector('#shell:not([hidden])', { timeout: 20000 }); await kp.waitForTimeout(1200);
+check('after approval the co-admin sees Orders', await kp.isVisible('#sideNav a[data-v=orders]'));
+await coCtx.close();
+
 check('no JavaScript errors in any page', errors.length === 0, errors.slice(0, 5).join(' | '));
 await b.close();
 sql(`UPDATE app.security_settings SET require_staff_mfa = false`);
