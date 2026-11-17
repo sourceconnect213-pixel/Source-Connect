@@ -61,6 +61,11 @@ input[type=checkbox], input[type=radio] { width: auto; accent-color: var(--red);
 .pill:empty { display: none; }
 .side nav a.active .pill { background: #fff; color: var(--red); }
 .side-foot { margin-top: auto; display: grid; gap: 6px; }
+.powered { font-size: 11px; letter-spacing: .04em; text-align: center; }
+.powered b { font-weight: 600; }
+.side-powered { margin-top: 4px; color: rgba(255,255,255,.5); }
+.login { grid-template-rows: 1fr auto; }
+.login-powered { position: relative; margin: 10px 0 max(0px, env(safe-area-inset-bottom, 0px)); color: rgba(255,255,255,.6); }
 
 .main { min-width: 0; }
 .top { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 12px; padding: 16px 28px; background: rgba(243,245,250,.9); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }

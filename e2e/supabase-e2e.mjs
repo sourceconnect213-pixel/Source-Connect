@@ -412,6 +412,40 @@ check('PIN opens the admin with the co-admin menu', await np.isVisible('#sideNav
 await nsC.close();
 sql(`UPDATE app.security_settings SET require_staff_mfa = false`);
 
+// 10d. main admin changes a username in Staff & Roles -> Edit; the person signs in with the new name
+await ap.evaluate(() => { location.hash = 'dashboard'; }); await ap.waitForTimeout(600);
+await ap.evaluate(() => { location.hash = 'staff'; }); await ap.waitForSelector('tr:has-text("shopstaff") [data-edit]', { timeout: 15000 });
+await ap.click('tr:has-text("shopstaff") [data-edit]'); await ap.waitForSelector('#stf [name=username]');
+check('edit form shows the username', (await ap.inputValue('#stf [name=username]')) === 'shopstaff');
+await ap.fill('#stf [name=username]', 'ownere2e'); await ap.click('#stf button.primary'); await ap.waitForTimeout(2000);
+check('a username already in use is refused', sql(`SELECT count(*) FROM app.staff_users WHERE username = 'shopstaff'`) === '1');
+await ap.fill('#stf [name=username]', 'shopkeeper'); await ap.click('#stf button.primary'); await ap.waitForTimeout(2500);
+check('username changed (and the sign-in name with it)', sql(`SELECT u.username || ' ' || a.email FROM app.staff_users u JOIN auth.users a ON a.id = u.id WHERE u.display_name = 'Shop Staff Person'`) === 'shopkeeper shopkeeper@staff.invalid');
+sql(`UPDATE app.security_settings SET require_staff_mfa = true`);
+const rnC = await ctx(); const rp = await page(rnC, 'renamed-staff');
+await rp.goto(withSb('admin/')); await rp.waitForSelector('input[name=user]');
+await rp.fill('input[name=user]', 'shopkeeper'); await rp.fill('input[name=pass]', 'Own-Shop-Pass-77'); await rp.click('#loginForm button:not(.pw-eye)');
+await rp.waitForSelector('#loginForm input[name=pin]', { timeout: 15000 });
+check('the person signs in with the new username', true);
+check('login page: "Powered by Hexora Private Limited"', /Powered by Hexora Private Limited/.test(await rp.textContent('#login')) && await rp.isVisible('.login-powered'));
+const lgC = await ctx({ viewport: { width: 390, height: 844 } }); const lp = await page(lgC, 'login-phone');   // signed out: the normal login card
+await lp.goto(withSb('admin/')); await lp.waitForSelector('input[name=user]'); await lp.waitForTimeout(900);
+check('login page on a phone: credit below the card, not over it', await lp.evaluate(() => document.querySelector('.login-powered').getBoundingClientRect().top >= document.querySelector('.login-card').getBoundingClientRect().bottom));
+await lp.screenshot({ path: OUT + '/sb-admin-login-phone.jpg', type: 'jpeg', quality: 70 }); await lgC.close();
+await rnC.close();
+sql(`UPDATE app.security_settings SET require_staff_mfa = false`);
+check('admin side menu: "Powered by Hexora Private Limited"', /Powered by Hexora Private Limited/.test(await ap.textContent('.side-foot')));
+const ftC = await ctx(); const fp = await page(ftC, 'footer');
+await fp.goto(withSb('')); await fp.waitForSelector('.card', { timeout: 20000 });
+check('website footer: "Powered by Hexora Private Limited"', /Powered by Hexora Private Limited/.test(await fp.textContent('.footer-bottom')));
+await fp.evaluate(() => document.querySelector('.footer-bottom').scrollIntoView()); await fp.waitForTimeout(400);
+await fp.screenshot({ path: OUT + '/sb-footer-desktop.jpg', type: 'jpeg', quality: 70 });
+await fp.setViewportSize({ width: 390, height: 844 }); await fp.waitForTimeout(400);
+check('website footer on a phone: no sideways scrolling', (await fp.evaluate(() => document.documentElement.scrollWidth - innerWidth)) <= 1);
+await fp.evaluate(() => document.querySelector('.footer-bottom').scrollIntoView()); await fp.waitForTimeout(400);
+await fp.screenshot({ path: OUT + '/sb-footer-phone.jpg', type: 'jpeg', quality: 70 });
+await ftC.close();
+
 // 11. usage page (main admin)
 await ap.evaluate(() => { location.hash = 'usage'; }); await ap.waitForSelector('.use-row', { timeout: 15000 });
 const use = await ap.$$eval('.use-row .use-head', l => l.map(x => x.textContent.replace(/\s+/g, ' ').trim()));

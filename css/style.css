@@ -430,6 +430,8 @@ main { min-height: 60vh; padding-bottom: 40px; }
 .pay span { background: #fff; color: var(--ink); font-size: 11px; font-weight: 700; padding: 5px 8px; border-radius: 4px; }
 .footer-bottom { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding-top: 24px; padding-bottom: 24px; margin-top: 30px; border-top: 1px solid rgba(255,255,255,.1); flex-wrap: wrap; }
 .logo.light b { color: #fff; }
+.ft-copy .powered { display: block; margin-top: 4px; font-size: 11px; letter-spacing: .04em; opacity: .7; }
+.ft-copy .powered b { font-weight: 600; }
 
 /* misc */
 .toast { position: fixed; left: 50%; bottom: 90px; z-index: 300; transform: translate(-50%, 20px); background: var(--ink); color: #fff; padding: 12px 18px; border-radius: 8px; font-size: 13px; opacity: 0; visibility: hidden; transition: .35s var(--ease); max-width: calc(100% - 32px); box-shadow: 0 16px 40px -12px rgba(0,0,0,.5); }

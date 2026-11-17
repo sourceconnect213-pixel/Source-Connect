@@ -1879,23 +1879,29 @@
           }
           var b = e.target.closest('[data-edit]'); if (!b) return;
           var u = r.staff.filter(function (x) { return x.id === b.dataset.edit; })[0];
-          openModal('Edit ' + u.username, '<form class="form" id="stf"><label class="full">Full name<input name="displayName" required value="' + esc(u.display_name) + '"></label><div class="full"><b>Roles</b><br>' + roleBoxes(u.roles) + '</div><div class="full"><b>Departments</b><br>' + shopBoxes(u.shops) + '</div>' +
+          var isMe = String(u.username).toLowerCase() === String(me.username || '').toLowerCase();
+          openModal('Edit ' + u.username, '<form class="form" id="stf"><label class="full">Full name<input name="displayName" required value="' + esc(u.display_name) + '"></label>' +
+            '<label class="full">Username <small class="muted">(' + (u.email ? 'signs in with the email ' + esc(u.email) : 'used to sign in') + ')</small><input name="username" required pattern="[A-Za-z0-9._\\-]{3,40}" title="3 to 40 letters, numbers, . _ -" autocomplete="off" autocapitalize="none" spellcheck="false" value="' + esc(u.username) + '"></label><div class="full"><b>Roles</b><br>' + roleBoxes(u.roles) + '</div><div class="full"><b>Departments</b><br>' + shopBoxes(u.shops) + '</div>' +
             stepRadios(stepOf(u)) +
             '<label>Status<select name="status"><option value="active"' + (u.status === 'active' ? ' selected' : '') + '>Active</option><option value="disabled"' + (u.status === 'disabled' ? ' selected' : '') + '>Disabled (cannot sign in)</option></select></label>' +
             '<label>Reset password (optional, 12+)<input name="pw" minlength="12" placeholder="Leave blank to keep"></label><label class="chk full"><input type="checkbox" name="unlock"> Unlock after too many wrong passwords</label>' +
             '<div class="full"><b>Extra access</b> <small class="muted">(on top of the roles; only you, the main admin, can give it)</small><br>' + ac.permissions.map(function (p) {
               var viaRole = r.roles.some(function (ro) { return u.roles.indexOf(ro.code) > -1 && (ro.permissions || []).indexOf(p.code) > -1; });
               return viaRole ? '' : '<label class="chk"><input type="checkbox" name="extra" value="' + esc(p.code) + '"' + ((ac.extra[u.id] || []).indexOf(p.code) > -1 ? ' checked' : '') + '> ' + esc(permName(p.code, p.description)) + '</label>'; }).join('') + '</div>' +
-            (String(u.username).toLowerCase() === String(me.username || '').toLowerCase() ? '' : '<div class="full ship-box" style="margin:0"><b>Delete this account</b><p class="muted" style="margin:4px 0 10px;font-size:13px">' + esc(u.display_name) + ' will not be able to sign in again. Orders, stock history and the audit log are kept.</p><button type="button" class="btn danger" id="stDel">Delete account</button></div>') +
+            (isMe ? '' : '<div class="full ship-box" style="margin:0"><b>Delete this account</b><p class="muted" style="margin:4px 0 10px;font-size:13px">' + esc(u.display_name) + ' will not be able to sign in again. Orders, stock history and the audit log are kept.</p><button type="button" class="btn danger" id="stDel">Delete account</button></div>') +
             '<div class="form-foot"><button class="btn primary">Save</button></div></form>');
-          $('#stf').onsubmit = function (ev) { ev.preventDefault(); var E = ev.target.elements, body = { displayName: E.displayName.value.trim(), roles: vals(ev.target, 'role'), shops: vals(ev.target, 'shop'), status: E.status.value, unlock: E.unlock.checked };
+          $('#stf').onsubmit = function (ev) { ev.preventDefault(); var E = ev.target.elements, newName = E.username.value.trim(), body = { displayName: E.displayName.value.trim(), roles: vals(ev.target, 'role'), shops: vals(ev.target, 'shop'), status: E.status.value, unlock: E.unlock.checked };
             if (E.pw.value) body.resetPassword = E.pw.value;
+            var renamed = newName !== String(u.username);
+            if (renamed) body.username = newName;
             var st = (ev.target.querySelector('input[name=step]:checked') || {}).value;
             if (st && st !== stepOf(u)) body.secondStep = st;
             var needPin = st === 'pin' && withPin.indexOf(u.id) < 0;
             var extra = vals(ev.target, 'extra');   // (Delete is a separate button below)
             SCG.api('PUT', '/admin/staff/' + u.id, body).then(function () { return SCG.api('PUT', '/admin/staff/' + u.id + '/access', { permissions: extra }); })
-              .then(function () { toast(needPin ? 'Saved. Now give ' + u.username + ' a PIN with “Set PIN”.' : 'Saved'); closeModal(); route(); }, fail); };
+              .then(function () {
+                if (renamed && isMe) { toast('Saved. Your username is now ' + newName); setTimeout(function () { location.reload(); }, 900); return; }
+                toast(needPin ? 'Saved. Now give ' + newName + ' a PIN with “Set PIN”.' : renamed && !u.email ? 'Saved. ' + u.display_name + ' now signs in with ' + newName : 'Saved'); closeModal(); route(); }, fail); };
           var del = $('#stDel');
           if (del) del.onclick = function () {
             var typed = prompt('This cannot be undone. Type the username  ' + u.username + '  to delete the account:', '');

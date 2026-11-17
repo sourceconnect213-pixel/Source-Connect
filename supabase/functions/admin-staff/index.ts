@@ -2,7 +2,7 @@
 // The caller's permission (staff.manage) is checked by the DATABASE using the caller's own token;
 // the service role is used only for the Supabase Auth admin calls that a browser can never make.
 //   {action:"create", username, displayName, email?, roles[], shops[], temporaryPassword, secondStep?: "pin"|"totp", pin?}
-//   {action:"update", id, displayName?, roles?, shops?, status?, secondStep?, resetPassword?}
+//   {action:"update", id, username?, displayName?, roles?, shops?, status?, secondStep?, resetPassword?}
 //   {action:"change-own-password", currentPassword, newPassword}   (any staff member, clears the temporary-password flag)
 //   {action:"delete", id}   (main admin; rules checked in the database first, then the sign-in account is removed)
 import { clientIp, dbError, env, json, preflight, rateLimited, readBody, rpc, userFrom } from '../_shared/common.ts';
@@ -79,10 +79,27 @@ Deno.serve(async (req) => {
 
   if (b?.action === 'update' && typeof b.id === 'string') {
     const data: Record<string, unknown> = {};
-    for (const k of ['displayName', 'roles', 'shops', 'status', 'secondStep']) if (b[k] !== undefined) data[k] = b[k];
+    for (const k of ['username', 'displayName', 'roles', 'shops', 'status', 'secondStep']) if (b[k] !== undefined) data[k] = b[k];
+    let oldName: string | undefined;   // to undo a username change if the sign-in address cannot follow
+    if (data.username !== undefined) {
+      const l = await rpc('admin_staff_list', {}, caller.token);
+      if (!l.ok) return dbError(req, l);
+      oldName = (l.data?.staff ?? []).find((x: any) => x.id === b.id)?.username;
+    }
     const s = await rpc('admin_staff_save', { p_staff_id: b.id, p_data: data }, caller.token);   // permission + validation in the database
     if (!s.ok) return dbError(req, s);
     const cur = await (await admin(`/users/${b.id}`, 'GET')).json();
+    // accounts without an email sign in with the username: their sign-in address is <username>@staff.invalid
+    if (oldName !== undefined && /@staff\.invalid$/i.test(String(cur?.email ?? ''))) {
+      const want = `${String(b.username).trim().toLowerCase()}@staff.invalid`;
+      if (String(cur.email).toLowerCase() !== want) {
+        const e = await admin(`/users/${b.id}`, 'PUT', { email: want, email_confirm: true });
+        if (!e.ok) {
+          await rpc('admin_staff_save', { p_staff_id: b.id, p_data: { username: oldName } }, caller.token);
+          return json(req, 409, { error: 'conflict', message: 'That username cannot be used for signing in. The username was not changed.' });
+        }
+      }
+    }
     if (b.resetPassword) {
       const problem = passwordProblem(b.resetPassword); if (problem) return json(req, 400, { error: 'bad_request', message: problem });
       await admin(`/users/${b.id}`, 'PUT', { password: b.resetPassword, app_metadata: { ...cur.app_metadata, must_change_password: true } });

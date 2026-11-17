@@ -102,4 +102,5 @@
   - **Role** (default **Co-Admin (store)**),
   - **Verify with**: **PIN** (ankath 4–8, dekaparak) hari **Authenticator app**.
   Email ona nê. E kena log wenne username + password eken, ita passe PIN eka hari app code eka hari. Palamu login eke password eka wenas karanna kiyanawa.
+- Username eka wenas karanna (oyage ma eka ath ulathwa): **Staff & Roles → Edit → Username** → **Save**. Email nathi account ekak nam e kena eeta passe log wenne aluth username eken. Email ekak thiyena account ekak (udaharanayak main admin) log wenne kalin widiyatama e email eken. Wena kenek use karana username ekak denna bæ.
 - Ekama kenekuge verify krama eka passe wenas karanna: **Edit → Verify with**. Oyage ma account eke lock wenna puluwan wenas kirima system eka nawaththanawa.

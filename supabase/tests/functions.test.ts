@@ -176,6 +176,34 @@ describe('admin-staff Edge Function', () => {
     expect((await rpc(owner, 'admin_staff_delete', { p_staff_id: ownerId })).code).toBe('bad_request');
     expect((await anon().rpc('admin_staff_delete', { p_staff_id: ownerId })).error).not.toBeNull();
   });
+  it('main admin changes usernames (own too); username-only accounts then sign in with the new name; duplicates and others refused', async () => {
+    const owner = await staff('owner1');
+    const tok = (await owner.auth.getSession()).data.session!.access_token;
+    const call = (body: unknown, t = tok) => fetch(`${cfg().url}/functions/v1/admin-staff`, { method: 'POST', headers: { 'content-type': 'application/json', apikey: cfg().anon, authorization: `Bearer ${t}` }, body: JSON.stringify(body) });
+    const n = Date.now().toString().slice(-6), a = 'ren' + n, b2 = 'Renamed' + n;
+    const c = await call({ action: 'create', username: a, displayName: 'Rename Me', roles: ['co_admin'], temporaryPassword: 'Temporary-Pass-77' });
+    expect(c.status).toBe(200); const id = (await c.json()).id;
+    expect((await anon().auth.signInWithPassword({ email: `${a}@staff.invalid`, password: 'Temporary-Pass-77' })).error).toBeNull();
+    expect((await call({ action: 'update', id, username: 'bad name!' })).status).toBe(400);
+    const dup = await call({ action: 'update', id, username: 'OWNER1' });   // case ignored
+    expect(dup.status).toBe(409); expect((await dup.json()).message).toMatch(/already used/);
+    const sup = await staff('support1');
+    expect((await call({ action: 'update', id, username: b2 }, (await sup.auth.getSession()).data.session!.access_token)).status).toBe(403);
+    expect((await q1(`SELECT username::text u FROM app.staff_users WHERE id = $1`, [id])).u).toBe(a);
+    expect((await call({ action: 'update', id, username: b2 })).status).toBe(200);
+    expect((await q1(`SELECT username::text u FROM app.staff_users WHERE id = $1`, [id])).u).toBe(b2);
+    expect((await q1(`SELECT email::text e FROM auth.users WHERE id = $1`, [id])).e).toBe(`${b2.toLowerCase()}@staff.invalid`);
+    expect((await anon().auth.signInWithPassword({ email: `${a}@staff.invalid`, password: 'Temporary-Pass-77' })).error).not.toBeNull();
+    expect((await anon().auth.signInWithPassword({ email: `${b2.toLowerCase()}@staff.invalid`, password: 'Temporary-Pass-77' })).error).toBeNull();
+    expect((await q1(`SELECT after ->> 'username' u FROM app.audit_logs WHERE action = 'staff.update' AND entity_id = $1 ORDER BY id DESC LIMIT 1`, [id])).u).toBe(b2);
+    // an account with an email keeps signing in with that email; the owner can rename themselves
+    const ownerId = (await q1(`SELECT id FROM app.staff_users WHERE username = 'owner1'`)).id;
+    const oemail = (await q1(`SELECT email::text e FROM auth.users WHERE id = $1`, [ownerId])).e;
+    expect((await call({ action: 'update', id: ownerId, username: 'mainadmin' + n })).status).toBe(200);
+    expect((await q1(`SELECT email::text e FROM auth.users WHERE id = $1`, [ownerId])).e).toBe(oemail);
+    expect((await call({ action: 'update', id: ownerId, username: 'owner1' })).status).toBe(200);
+    expect((await call({ action: 'delete', id })).status).toBe(200);
+  });
   it('needs a signed-in caller', async () => {
     expect((await fetch(`${cfg().url}/functions/v1/admin-staff`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status).toBe(401);
   });
