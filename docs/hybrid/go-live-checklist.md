@@ -12,7 +12,7 @@ Each step needs the owner's own account or decision. Claude does not buy service
   - `supabase functions deploy`;
   - `supabase secrets set --env-file <file on your computer>`, with sandbox PayHere values and `PAYHERE_MODE=sandbox`.
 - [ ] Auth settings in the dashboard:
-  - minimum password length 12, letters + digits;
+  - customer passwords: minimum length 8, no character rule (the owner's choice, 2026-11-19); leaked-password protection on. Staff passwords stay 12+ with letters and digits, enforced by the admin-staff Edge Function;
   - TOTP MFA enrolment **on**;
   - redirect URLs = the staging site;
   - email provider (SMTP) configured. Supabase's built-in sender only delivers to members of the project's own

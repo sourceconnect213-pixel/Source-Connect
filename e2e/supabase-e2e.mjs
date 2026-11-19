@@ -296,7 +296,8 @@ sql(`UPDATE app.products SET status = 'archived' WHERE slug = '${sizeSlug}'`);
 // 7. customer account (Supabase Auth)
 const acc = await ctx(); const cp = await page(acc, 'customer');
 await cp.goto(withSb('#account')); await cp.waitForSelector('#regF', { timeout: 20000 });
-await cp.fill('#regF [name=name]', 'E2E Customer'); await cp.fill('#regF [name=email]', `e2e-${Date.now()}@example.com`); await cp.fill('#regF [name=password]', 'E2e-Customer-Pass-1');
+await cp.fill('#regF [name=name]', 'E2E Customer'); await cp.fill('#regF [name=email]', `e2e-${Date.now()}@example.com`); check('create account: password needs 8+ characters only', (await cp.getAttribute('#regF [name=password]', 'minlength')) === '8' && /8\+ characters/.test(await cp.textContent('#regF')));
+await cp.fill('#regF [name=password]', 'lankatea');   // 8 letters, no numbers: allowed for customers
 await cp.click('#regF button:not(.pw-eye)'); await cp.waitForSelector('#profForm', { timeout: 20000 });
 check('customer can create an account', (await cp.textContent('.acct-head')).includes('E2E'));
 await cp.reload(); await cp.waitForTimeout(2500); await cp.evaluate(() => { location.hash = 'account'; }); await cp.waitForTimeout(1500);

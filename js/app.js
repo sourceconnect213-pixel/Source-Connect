@@ -919,7 +919,7 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
           '</form>' +
         '<form class="panel form" id="regF"><h3>Create an account</h3><p class="full" style="margin:0;color:var(--muted);font-size:13px">Optional: you can always check out as a guest. An account keeps all your orders together.</p>' +
           '<label class="full">Full name<input name="name" required maxlength="80" autocomplete="name"></label><label>Email<input name="email" type="email" required autocomplete="email"></label>' +
-          '<label>Phone (optional)<input name="phone" maxlength="20" autocomplete="tel"></label><label class="full">Password (12+ characters)<input name="password" type="password" required minlength="12" autocomplete="new-password"></label>' +
+          '<label>Phone (optional)<input name="phone" maxlength="20" autocomplete="tel"></label><label class="full">Password (8+ characters)<input name="password" type="password" required minlength="8" autocomplete="new-password"></label>' +
           '<button class="btn full" style="grid-column:1/-1">Create account</button><p class="full" id="regMsg" style="margin:0;color:var(--red)"></p></form></div>' +
         (SCG.myOrders().length ? '<div class="panel" style="padding:16px;margin-top:14px"><h3 style="margin-top:0">Orders placed on this device</h3>' + SCG.myOrders().map(function (o) { return '<div class="sum-row"><a href="#order/' + esc(o.number) + '">' + esc(o.number) + '</a><span class="muted">' + new Date(o.at).toLocaleDateString() + '</span></div>'; }).join('') + '</div>' : '') + '</div>';
       var done = function (c) {
@@ -965,7 +965,7 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
         function (err) { $('#tokBox').innerHTML = '<h2>Link not valid</h2><p>' + esc(err.message) + '</p>'; });
       return;
     }
-    app.innerHTML = '<div class="wrap"><form class="panel form" id="rpF" style="max-width:520px;margin:30px auto"><h3>Choose a new password</h3><label class="full">New password (12+ characters)<input name="password" type="password" required minlength="12" autocomplete="new-password"></label><button class="btn navy full" style="grid-column:1/-1">Save password</button><p class="full" id="rpMsg" style="margin:0"></p></form></div>';
+    app.innerHTML = '<div class="wrap"><form class="panel form" id="rpF" style="max-width:520px;margin:30px auto"><h3>Choose a new password</h3><label class="full">New password (8+ characters)<input name="password" type="password" required minlength="8" autocomplete="new-password"></label><button class="btn navy full" style="grid-column:1/-1">Save password</button><p class="full" id="rpMsg" style="margin:0"></p></form></div>';
     $('#rpF').onsubmit = function (e) { e.preventDefault(); SCG.api('POST', '/customers/password-reset/confirm', { token: token, password: e.target.elements.password.value }).then(function () { $('#rpMsg').innerHTML = 'Password saved. <a href="#account">Sign in</a>'; }, function (err) { $('#rpMsg').textContent = err.message; }); };
   }
 
