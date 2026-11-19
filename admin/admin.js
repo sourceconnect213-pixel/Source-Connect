@@ -1420,14 +1420,14 @@
     // hide menu items this person cannot use
     var NEED = { dashboard: 'dashboard.view', orders: 'orders.read', customers: 'customers.read', products: 'catalog.read', flash: 'content.write', categories: 'catalog.write', origins: 'settings.write',
       collections: 'catalog.read', homepage: 'content.write', banners: 'content.write', header: 'content.write', pages: 'content.write', settings: 'content.write', editor: 'catalog.read',
-      staff: 'staff.manage', audit: 'audit.read', backups: 'backups.read', coupons: 'coupons.manage', reports: 'reports.view', renewals: 'renewals.manage', access: 'dashboard.view', usage: 'usage.view' };
+      staff: 'staff.manage', audit: 'audit.read', backups: 'backups.read', coupons: 'coupons.manage', reports: 'reports.view', renewals: 'renewals.manage', access: 'dashboard.view', usage: 'usage.view', reviews: 'reviews.manage' };
     // plain names for what can be asked for / given on top of a role
     var PERM_NAME = { 'dashboard.view': 'Dashboard', 'reports.view': 'Sales & profit reports', 'costs.write': 'Cost prices', 'catalog.read': 'See products',
       'catalog.write': 'Add and edit products, photos, categories and collections', 'inventory.adjust': 'Change stock', 'orders.read': 'See orders',
       'orders.update': 'Change order and shipment status', 'payments.read': 'See payment details', 'payments.verify': 'Confirm bank transfers and cash collected',
       'refunds.create': 'Refunds and cancelling paid orders', 'customers.read': 'See customer names, phones and addresses', 'customers.write': 'Edit or disable customer accounts',
       'content.write': 'Banners, homepage, header/footer, pages and flash sale', 'settings.write': 'Delivery fees, payment options and import countries',
-      'coupons.manage': 'Promo codes', 'usage.view': 'Hosting usage (database, photos, users)', 'audit.read': 'Audit log', 'backups.read': 'Backup status', 'renewals.manage': 'Renewal reminders' };
+      'coupons.manage': 'Promo codes', 'usage.view': 'Hosting usage (database, photos, users)', 'audit.read': 'Audit log', 'backups.read': 'Backup status', 'renewals.manage': 'Renewal reminders', 'reviews.manage': 'Product reviews (hide and reply)' };
     var permName = function (c, d) { return PERM_NAME[c] || d || c; };
     function applyPermissions() {
       var nav = $('#sideNav');
@@ -1438,6 +1438,10 @@
       if (!$('#sideNav [data-v=usage]')) {
         var rep = $('#sideNav a[data-v=reports]');
         if (rep) rep.insertAdjacentHTML('afterend', '<a href="#usage" data-v="usage"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9M12 12l5-5M12 3v4M21 12h-4"/></svg>Usage</a>');
+      }
+      if (!$('#sideNav [data-v=reviews]')) {
+        var prod = $('#sideNav a[data-v=products]');
+        if (prod) prod.insertAdjacentHTML('afterend', '<a href="#reviews" data-v="reviews"><svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/></svg>Reviews</a>');
       }
       if (!$('#sideNav [data-v=staff]')) {
         nav.insertAdjacentHTML('beforeend', '<small class="side-label">Security &amp; data</small>' +
@@ -1462,6 +1466,50 @@
     // ---------- usage: how much of the hosting plan is used ----------
     // Plan amounts from the Supabase and Cloudflare documentation (checked 2026-11-16). Update here if the plan changes.
     var PLAN = { diskGB: 8, storageGB: 100, mau: 100000, egressGB: 250 };
+    // ---------- product reviews: written by buyers after delivery; staff hide abuse and reply ----------
+    VIEWS.reviews = { title: 'Reviews', sub: 'Ratings and opinions from customers who received their order', render: function (v) {
+      var st = { filter: 'all', list: [] }, h0 = location.hash;
+      var starTxt = function (n) { return '<span class="rv-stars" aria-label="' + n + ' out of 5">' + '★★★★★'.slice(0, n) + '<span>' + '★★★★★'.slice(n) + '</span></span>'; };
+      function card(x) {
+        return '<div class="panel rv-card' + (x.status === 'hidden' ? ' rv-hidden' : '') + '" data-id="' + x.id + '">' +
+          '<div class="rv-head">' + starTxt(x.rating) + '<b>' + esc(x.productName) + '</b>' + (x.variant ? ' <small class="muted">' + esc(x.variant) + '</small>' : '') +
+            (x.status === 'hidden' ? ' <span class="pill">Hidden</span>' : '') + '</div>' +
+          '<small class="muted">' + esc(x.buyer) + ' (shown as “' + esc(x.name) + '”) · order ' + esc(x.order) + ' · ' + when(x.at) + '</small>' +
+          (x.comment ? '<p class="rv-text">' + esc(x.comment) + '</p>' : '<p class="muted rv-text">Stars only, no written review.</p>') +
+          '<label class="rv-reply">Your public reply' + (x.repliedAt ? ' <small class="muted">(' + when(x.repliedAt) + ')</small>' : '') +
+            '<textarea maxlength="1000" rows="2" placeholder="Thank the customer, or explain how you will fix the problem">' + esc(x.reply || '') + '</textarea></label>' +
+          '<div class="rv-actions"><button class="btn sm primary" data-act="reply">' + (x.reply ? 'Save reply' : 'Reply') + '</button>' +
+            (x.status === 'hidden' ? '<button class="btn sm" data-act="show">Show on the website</button>' : '<button class="btn sm danger" data-act="hide">Hide from the website</button>') + '</div></div>';
+      }
+      function load(more) {
+        if (!more) st.list = [];
+        SCG.api('GET', '/admin/reviews?filter=' + st.filter + '&offset=' + st.list.length).then(function (d) { if (location.hash !== h0) return;
+          st.list = st.list.concat(d.reviews); var c = d.counts, total = { all: c.all, low: c.low, unanswered: c.unanswered, hidden: c.hidden }[st.filter];
+          v.innerHTML = '<div class="filters">' + [['all', 'All', c.all], ['low', '1–2 stars', c.low], ['unanswered', 'Not answered', c.unanswered], ['hidden', 'Hidden', c.hidden]].map(function (f) {
+              return '<button class="btn sm' + (st.filter === f[0] ? ' primary' : '') + '" data-f="' + f[0] + '">' + f[1] + ' (' + f[2] + ')</button>'; }).join('') +
+              '<span class="muted" style="align-self:center;font-size:13px">' + c.week + ' new in the last 7 days</span></div>' +
+            '<p class="muted" style="margin-top:0;font-size:13px">Only customers whose order was delivered can review, so every review is a real purchase. Hide a review only if it is abusive, off-topic or shares private details — not because it is negative. Answering a bad review politely builds trust.</p>' +
+            (st.list.length ? st.list.map(card).join('') : '<div class="panel"><p class="muted" style="margin:0">' + (st.filter === 'all' ? 'No reviews yet. They appear here when customers rate a delivered order.' : 'Nothing here.') + '</p></div>') +
+            (st.list.length < total ? '<button class="btn" id="rvMore">Show more</button>' : '');
+        }, function (err) { if (location.hash !== h0) return; v.innerHTML = '<p class="muted">' + esc(err.message) + '</p>'; });
+      }
+      v.innerHTML = '<p class="muted">Loading…</p>';
+      v.onclick = function (e) {
+        var f = e.target.closest('[data-f]'); if (f) { st.filter = f.dataset.f; load(false); return; }
+        if (e.target.closest('#rvMore')) { load(true); return; }
+        var b = e.target.closest('[data-act]'); if (!b) return;
+        var cardEl = b.closest('.rv-card'), id = cardEl.dataset.id, act = b.dataset.act, body = {};
+        if (act === 'reply') body.reply = cardEl.querySelector('textarea').value.trim();
+        if (act === 'hide') { if (!confirm('Hide this review from the product page? The rating is also removed from the average.')) return; body.status = 'hidden'; }
+        if (act === 'show') body.status = 'visible';
+        b.disabled = true;
+        SCG.api('PUT', '/admin/reviews/' + id, body).then(function () {
+          toast(act === 'reply' ? (body.reply ? 'Reply saved — it shows under the review' : 'Reply removed') : act === 'hide' ? 'Review hidden' : 'Review shown again'); load(false); refreshPreview();
+        }, function (err) { b.disabled = false; fail(err); });
+      };
+      load(false);
+    } };
+
     VIEWS.usage = { title: 'Usage', sub: 'How much of the Supabase Pro plan the shop uses', render: function (v) {
       v.innerHTML = '<p class="muted">Loading…</p>';
       var h0 = location.hash;

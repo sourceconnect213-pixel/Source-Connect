@@ -162,6 +162,10 @@
     if (path === '/cart/quote') return rpc('quote_cart', { p_items: body.items, p_coupon: body.coupon || null }, null, 30000);
     if (path === '/orders') return edge('checkout', body, load('customer') ? 'customer' : null, opts.idempotencyKey ? { 'idempotency-key': opts.idempotencyKey } : {});
     if (path === '/orders/track') return edge('track-order', body);
+    // ---- product reviews (buyers of a delivered order; the database checks who may write) ----
+    if ((x = m(/^\/reviews\/([a-z0-9-]+)$/, path))) return rpc('product_reviews', { p_product: x[1], p_stars: qs.stars ? Number(qs.stars) : null, p_limit: 10, p_offset: Number(qs.offset || 0) });
+    if (path === '/orders/reviews') return rpc('order_reviews', { p_number: body.number, p_token: body.token || null }, 'customer');
+    if (path === '/orders/reviews/save') return rpc('submit_review', { p_number: body.number, p_token: body.token || null, p_product: body.product, p_rating: Number(body.rating), p_comment: body.comment || '' }, 'customer');
     if (path === '/account/orders') return rpc('my_orders', {}, 'customer');
     if ((x = m(/^\/account\/orders\/([^/]+)$/, path))) return rpc('my_order', { p_number: decodeURIComponent(x[1]) }, 'customer').then(function (o) { if (!o) throw err(404, 'not_found', 'Order not found.'); return o; });
     if (path === '/customers/me' && method === 'GET') return token('customer').then(function (t) {
@@ -237,6 +241,8 @@
     if ((x = m(/^\/admin\/coupons\/([^/]+)$/, path))) return rpc('admin_set_coupon_active', { p_id: x[1], p_active: !!body.active }, 'staff');
     // extra access: a staff member asks, the main admin approves (or gives it directly)
     if (path === '/admin/usage') return rpc('admin_usage', {}, 'staff');
+    if (path.split('?')[0] === '/admin/reviews') return rpc('admin_reviews', { p_filter: qs.filter || 'all', p_limit: 50, p_offset: Number(qs.offset || 0) }, 'staff');
+    if ((x = m(/^\/admin\/reviews\/([0-9]+)$/, path))) return rpc('admin_review_update', { p_id: Number(x[1]), p_status: body.status || null, p_reply: body.reply === undefined ? null : String(body.reply) }, 'staff');
     if (path === '/admin/access/mine') return rpc('admin_my_access', {}, 'staff');
     if (path === '/admin/access' && method === 'GET') return rpc('admin_access_overview', {}, 'staff');
     if (path === '/admin/access/requests' && method === 'POST') return rpc('admin_request_access', { p_permission: body.permission, p_note: body.note || '' }, 'staff');

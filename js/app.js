@@ -467,6 +467,73 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
     var out = [p.color]; for (var i = 0; out.length < 4 && i < pal.length; i++) { var c = pal[(i + p.name.length) % pal.length]; if (out.indexOf(c) < 0) out.push(c); }
     return out;
   }
+  // ---------- product reviews (API mode): written by buyers of a delivered order ----------
+  function revDate(t) { try { return new Date(t).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); } catch (e) { return ''; } }
+  function revItem(v) {
+    return '<div class="rev"><div class="rev-top">' + stars(v.rating) + '<b>' + esc(v.name) + '</b><span class="rev-ok">✓ Verified purchase</span></div>' +
+      '<small class="rev-meta">' + revDate(v.at) + (v.variant ? ' · ' + esc(v.variant) : '') + (v.edited ? ' · edited' : '') + '</small>' +
+      (v.comment ? '<p class="rev-text">' + esc(v.comment) + '</p>' : '') +
+      (v.reply ? '<div class="rev-reply"><b>Response from Source Connect</b><p>' + esc(v.reply) + '</p></div>' : '') + '</div>';
+  }
+  function reviewsUI(p) {
+    var st = { stars: null, list: [] };
+    function load(more) {
+      var box = $('#revBox'); if (!box) return;
+      if (!more) st.list = [];
+      SCG.api('GET', '/reviews/' + encodeURIComponent(p.id) + '?offset=' + st.list.length + (st.stars ? '&stars=' + st.stars : '')).then(function (d) {
+        box = $('#revBox'); if (!box) return;
+        if (!d) { box.innerHTML = '<p style="margin:0;color:var(--muted)">Reviews are not available for this product.</p>'; return; }
+        st.list = st.list.concat(d.reviews || []);
+        if (!d.count) { box.innerHTML = '<p style="margin:0;color:var(--muted)">No reviews yet. Customers who received this product can rate it from their order (My account → My orders).</p>'; return; }
+        var bars = [5, 4, 3, 2, 1].map(function (n) { var c = d.stars[String(n)] || 0;
+          return '<button type="button" data-fs="' + n + '" class="' + (st.stars === n ? 'on' : '') + '" aria-label="Show ' + n + '-star reviews"><span>' + n + '★</span><i><em style="width:' + (c / d.count * 100) + '%"></em></i><span>' + c + '</span></button>'; }).join('');
+        box.innerHTML = '<div class="rating-sum"><div><div class="big">' + d.average + '<small style="font-size:18px;color:var(--muted)">/5</small></div>' + stars(d.average) +
+            '<div style="color:var(--muted);font-size:12px">' + d.count + (d.count === 1 ? ' rating' : ' ratings') + '</div></div><div class="rbars">' + bars + '</div></div>' +
+          '<div class="rev-filter">' + (st.stars ? '<span>Showing ' + st.stars + '-star reviews (' + d.matching + ')</span> <button type="button" class="link-sm" data-fs="0">Show all</button>' : '<span>Newest first</span>') + '</div>' +
+          (st.list.length ? st.list.map(revItem).join('') : '<p class="muted">No reviews with this rating.</p>') +
+          (st.list.length < d.matching ? '<button type="button" class="btn line" id="revMore" style="margin-top:12px">Show more reviews</button>' : '');
+        box.onclick = function (e) {
+          var f = e.target.closest('[data-fs]'); if (f) { var n = +f.dataset.fs; st.stars = n && n !== st.stars ? n : null; load(false); return; }
+          if (e.target.closest('#revMore')) load(true);
+        };
+      }, function (err) { var b = $('#revBox'); if (b) b.innerHTML = '<p style="margin:0;color:var(--muted)">' + esc(err.message) + '</p>'; });
+    }
+    load(false);
+  }
+  // order page: the buyer rates each item after delivery
+  function orderReviewsUI(number, token) {
+    SCG.api('POST', '/orders/reviews', { number: number, token: token || null }).then(function (d) {
+      var box = $('#ordRev'); if (!box || !d || !d.canReview || !d.items.length) return;
+      box.innerHTML = '<h3 style="margin:18px 0 4px">Rate your items</h3><p class="muted" style="margin:0 0 10px;font-size:13px">Your rating helps other customers. Other people see your first name and the first letter of your last name.</p>' +
+        d.items.map(function (it, i) {
+          var v = it.review;
+          return '<form class="rev-form" data-i="' + i + '" data-r="' + (v ? v.rating : 0) + '"><div class="rev-form-head"><a href="#p/' + esc(it.id) + '"><b>' + esc(it.name) + '</b></a>' + (it.variant ? ' <small class="muted">' + esc(it.variant) + '</small>' : '') + '</div>' +
+            (v && v.status === 'hidden' ? '<p class="muted" style="margin:4px 0;font-size:12px">The shop has hidden this review from the product page.</p>' : '') +
+            '<div class="star-pick" role="radiogroup" aria-label="Your rating for ' + esc(it.name) + '">' + [1, 2, 3, 4, 5].map(function (n) {
+              return '<button type="button" role="radio" data-n="' + n + '" aria-checked="' + (v && v.rating === n) + '" aria-label="' + n + (n === 1 ? ' star' : ' stars') + '"' + (v && n <= v.rating ? ' class="on"' : '') + '>' + I.star + '</button>'; }).join('') + '</div>' +
+            '<textarea name="comment" maxlength="1000" rows="3" placeholder="What did you like or not like? (optional)">' + esc(v ? v.comment : '') + '</textarea>' +
+            (v && v.reply ? '<div class="rev-reply"><b>Response from Source Connect</b><p>' + esc(v.reply) + '</p></div>' : '') +
+            '<button class="btn navy sm">' + (v ? 'Update review' : 'Submit review') + '</button></form>';
+        }).join('');
+      box.onclick = function (e) {
+        var b = e.target.closest('.star-pick button'); if (!b) return;
+        var f = b.closest('form'), n = +b.dataset.n; f.dataset.r = n;
+        $$('.star-pick button', f).forEach(function (x) { x.classList.toggle('on', +x.dataset.n <= n); x.setAttribute('aria-checked', String(+x.dataset.n === n)); });
+      };
+      $$('.rev-form', box).forEach(function (f) {
+        f.onsubmit = function (e) {
+          e.preventDefault(); var it = d.items[+f.dataset.i], n = +f.dataset.r;
+          if (!n) { toast('Choose 1 to 5 stars'); return; }
+          var btn = f.querySelector('button.btn'); btn.disabled = true;
+          SCG.api('POST', '/orders/reviews/save', { number: number, token: token || null, product: it.id, rating: n, comment: f.elements.comment.value.trim() })
+            .then(function () { toast('Thank you for your review!'); orderReviewsUI(number, token); }, function (err) { btn.disabled = false; toast(err.message); });
+        };
+      });
+      if (revJump) { revJump = false; box.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    }, function () {});
+  }
+  var revJump = false;
+
   function renderPDP(id) {
     var p = SCG.productById(id);
     if (!p) { app.innerHTML = '<div class="wrap"><div class="panel empty" style="margin-top:16px"><h3>Product not found</h3><a class="btn" href="#">Back to home</a></div></div>'; return; }
@@ -514,10 +581,11 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
       $$('#ptabs button').forEach(function (b) { b.classList.toggle('on', b.dataset.t === t); });
       $('#pbody').innerHTML = t === 'd' ? '<p style="margin-top:0;white-space:pre-line">' + esc(p.description) + '</p><ul style="color:var(--muted)"><li>Brand: ' + esc(p.brand) + '</li><li>' + (oi.local ? 'Ships from Colombo (' + esc(oi.days) + ' days)' : 'Imported from ' + esc(oi.name) + ' (' + esc(oi.days) + ' days)') + '</li>' + (s.payCOD ? '<li>Cash on Delivery available islandwide</li>' : '') + '</ul>'
         : t === 's' ? '<table class="spec"><tr><td>Brand</td><td>' + esc(p.brand) + '</td></tr><tr><td>Category</td><td>' + esc(cat ? cat.name : '') + '</td></tr><tr><td>SKU</td><td>' + esc(p.id.toUpperCase()) + '</td></tr>' + ((p.sizes || []).length ? '<tr><td>Sizes</td><td>' + esc(p.sizes.join(', ')) + '</td></tr>' : '') + '<tr><td>Ships from</td><td>' + (oi.local ? 'Colombo stock' : esc(oi.name)) + '</td></tr><tr><td>In stock</td><td>' + p.stock + '</td></tr></table>'
+          : SCG.API ? '<div id="revBox"><p style="margin:0;color:var(--muted)">Loading reviews…</p></div>'
           : !p.reviews ? '<p style="margin:0;color:var(--muted)">No ratings yet. Ratings appear here after customers review this product.</p>' : '<div class="rating-sum"><div><div class="big">' + p.rating + '<small style="font-size:18px;color:var(--muted)">/5</small></div>' + stars(p.rating) + '<div style="color:var(--muted);font-size:12px">' + p.reviews + ' ratings</div></div><div class="rbars">' + dist.map(function (n, i) { return '<div><span>' + (5 - i) + '★</span><i><em style="width:' + (p.reviews ? n / p.reviews * 100 : 0) + '%"></em></i><span>' + n + '</span></div>'; }).join('') + '</div></div>';
     }
     tab('d');
-    $('#ptabs').onclick = function (e) { var b = e.target.closest('button'); if (b) tab(b.dataset.t); };
+    $('#ptabs').onclick = function (e) { var b = e.target.closest('button'); if (b) { tab(b.dataset.t); if (b.dataset.t === 'r' && SCG.API) reviewsUI(p); } };
     $('#thumbs').addEventListener('click', function (e) { var b = e.target.closest('[data-img]'); if (!b) return; $('#big').innerHTML = '<img src="' + SCG.imgSrc(imgs[+b.dataset.img]) + '" alt="' + esc(p.name) + '" data-pid="' + esc(p.id) + '">'; $$('#thumbs button').forEach(function (x) { x.classList.toggle('on', x === b); }); });
     function pick(c) { st.color = c; $('#big').innerHTML = visual(p, c); ['#thumbs', '#sw'].forEach(function (s) { if ($(s)) $$('button', $(s)).forEach(function (b) { b.classList.toggle('on', b.dataset.c === c); }); }); }
     // colour buttons only (photo thumbnails have their own handler above)
@@ -814,7 +882,9 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
           '<div style="margin-top:12px">' + o.items.map(function (it) { return '<div class="sum-row"><span><a href="#p/' + esc(it.id) + '">' + esc(it.name) + '</a> <small class="muted">×' + it.qty + (it.variant ? ' · ' + esc(it.variant) : '') + '</small></span><span>' + money(it.lineTotal) + '</span></div>'; }).join('') +
           '<div class="sum-row"><span>Delivery</span><span>' + (o.shipping ? money(o.shipping) : 'FREE') + '</span></div>' + (o.discount ? '<div class="sum-row"><span>Promo code</span><span>−' + money(o.discount) + '</span></div>' : '') +
           '<div class="sum-row total"><span>Total</span><span>' + money(o.total) + '</span></div></div>' +
-          (o.customer && o.customer.address ? '<p class="muted" style="font-size:13px">Delivering to ' + esc(o.customer.name) + ', ' + esc(o.customer.address) + ', ' + esc(o.customer.city) + ', ' + esc(o.customer.district) + '</p>' : '');
+          (o.customer && o.customer.address ? '<p class="muted" style="font-size:13px">Delivering to ' + esc(o.customer.name) + ', ' + esc(o.customer.address) + ', ' + esc(o.customer.city) + ', ' + esc(o.customer.district) + '</p>' : '') +
+          (o.status === 'delivered' ? '<div id="ordRev"></div>' : '');
+        if (o.status === 'delivered') orderReviewsUI(number, mine && mine.token);
         if (waiting && tries++ < 40) setTimeout(function () { if (location.hash === '#order/' + number) load(); }, 4000);
       }, function () {
         $('#ordBox').innerHTML = '<h2 style="margin-top:0">Order ' + esc(number) + '</h2><p>This order is not saved on this device. Track it with your phone number instead:</p><p><a class="btn navy" href="#track/' + esc(number) + '">Track with phone number</a></p>';
@@ -875,8 +945,9 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
         var idx = ST_IDX[o.status] === undefined ? -1 : ST_IDX[o.status], bad = { cancelled: 1, expired: 1, refunded: 1 }[o.status];
         return '<div class="acct-order"><div class="ao-top"><b>' + esc(o.number) + '</b><span class="ao-status ' + (bad ? 'x' : o.status === 'delivered' ? 'ok' : '') + '">' + esc(ST_LABEL[o.status] || o.status) + '</span><span class="muted">' + new Date(o.placedAt).toLocaleDateString() + ' · ' + money(o.total) + '</span></div>' +
           (!bad ? '<div class="ao-bar">' + [0, 1, 2, 3, 4].map(function (i) { return '<i class="' + (i <= idx ? 'on' : '') + '"></i>'; }).join('') + '</div>' : '') +
-          '<div class="ao-actions"><a class="link-sm" href="#order/' + esc(o.number) + '">Details</a></div></div>';
+          '<div class="ao-actions"><a class="link-sm" href="#order/' + esc(o.number) + '">Details</a>' + (o.status === 'delivered' ? ' <a class="link-sm rev-link" href="#order/' + esc(o.number) + '">★ Rate &amp; review</a>' : '') + '</div></div>';
       }).join('') : '<p class="empty">No orders yet.</p>');
+      $('#myOrders').onclick = function (e) { if (e.target.closest('.rev-link')) revJump = true; };
     }, function (err) { $('#myOrders').innerHTML = '<p class="empty">' + esc(err.message) + '</p>'; });
     $('#profForm').onsubmit = function (e) {
       e.preventDefault(); var E = e.target.elements;

@@ -28,7 +28,8 @@ describe('what each kind of caller can reach (deny by default)', () => {
     const norls = await db().query(`SELECT relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'app' AND c.relkind = 'r' AND NOT c.relrowsecurity`);
     expect(norls.rows).toEqual([]);
     const pub = await db().query(`SELECT p.proname FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace WHERE n.nspname = 'public' AND has_function_privilege('anon', p.oid, 'EXECUTE') ORDER BY 1`);
-    expect(pub.rows.map(r => r.proname)).toEqual(['get_product', 'quote_cart', 'search_products', 'storefront_snapshot']);
+    // reviews: product_reviews is read-only; order_reviews / submit_review need the buyer's own order (account or secret token)
+    expect(pub.rows.map(r => r.proname)).toEqual(['get_product', 'order_reviews', 'product_reviews', 'quote_cart', 'search_products', 'storefront_snapshot', 'submit_review']);
   });
   it('customers cannot use admin functions', async () => {
     const c = await customer();

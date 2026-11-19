@@ -446,6 +446,54 @@ await fp.evaluate(() => document.querySelector('.footer-bottom').scrollIntoView(
 await fp.screenshot({ path: OUT + '/sb-footer-phone.jpg', type: 'jpeg', quality: 70 });
 await ftC.close();
 
+// 10e. product reviews: the buyer rates a delivered order on the order page; it shows on the product page; staff reply and hide
+sql(`UPDATE app.inventory SET on_hand = 50, reserved = 0 FROM app.product_variants v WHERE v.id = inventory.variant_id AND v.sku = 'BAGS-4'`);
+sql(`TRUNCATE app.product_reviews`); sql(`UPDATE app.rate_limits SET hits = 0 WHERE key LIKE 'review:%'`);
+sql(`UPDATE app.products SET rating = 0, reviews_count = 0 WHERE slug = 'bags-4'`);   // the database tests left their own reviews' totals here
+const rvOrder = await (await fetch(`${SB}/rest/v1/rpc/place_order`, { method: 'POST', headers: { apikey: SERVICE, authorization: `Bearer ${SERVICE}`, 'content-type': 'application/json' },
+  body: JSON.stringify({ p_input: { items: [{ id: 'bags-4', size: '', qty: 1 }], customer: { name: 'Ruwani Fernando', phone: '0771112233', email: 'ruwani@example.com', address: '5 Lake Road', city: 'Galle', district: 'Galle', note: '' }, payment: 'cod' }, p_customer_id: null, p_idempotency_key: null }) })).json();
+check('review test order placed', /^SC-/.test(rvOrder.orderNumber || ''), JSON.stringify(rvOrder).slice(0, 120));
+const rvC = await ctx(); const rv = await page(rvC, 'review');
+await rv.goto(withSb('')); await rv.waitForSelector('.card', { timeout: 20000 });
+await rv.evaluate(([n, t]) => SCG.rememberOrder(n, t), [rvOrder.orderNumber, rvOrder.trackingToken]);
+await rv.evaluate((n) => { location.hash = 'order/' + n; }, rvOrder.orderNumber); await rv.waitForSelector('#ordBox h2', { timeout: 15000 }); await rv.waitForTimeout(1200);
+check('no review box before delivery', !(await rv.$('#ordRev .rev-form')));
+sql(`UPDATE app.orders SET status = 'delivered' WHERE order_number = '${rvOrder.orderNumber}'`);
+await rv.reload(); await rv.waitForSelector('#ordRev .rev-form', { timeout: 15000 });
+check('delivered order: "Rate your items" with stars', /Rate your items/.test(await rv.textContent('#ordRev')) && (await rv.$$('#ordRev .star-pick button')).length === 5);
+await rv.click('#ordRev .rev-form button.btn'); await rv.waitForTimeout(500);
+check('submit without stars: asks for stars, nothing saved', sql(`SELECT count(*) FROM app.product_reviews`) === '0');
+await rv.click('#ordRev .star-pick button[data-n="4"]');
+check('4 stars light up', (await rv.$$('#ordRev .star-pick button.on')).length === 4);
+await rv.fill('#ordRev textarea', 'Nice leather, came in 9 days.'); await rv.click('#ordRev .rev-form button.btn');
+await rv.waitForFunction(() => /Update review/.test(document.querySelector('#ordRev')?.textContent || ''), null, { timeout: 15000 });
+check('review saved (4 stars, text) and shown as "Ruwani F."', sql(`SELECT rating || ' ' || author_name || ' ' || comment FROM app.product_reviews`) === '4 Ruwani F. Nice leather, came in 9 days.');
+await rv.setViewportSize({ width: 390, height: 844 }); await rv.waitForTimeout(300);
+check('review form on a phone: no sideways scrolling', (await rv.evaluate(() => document.documentElement.scrollWidth - innerWidth)) <= 1);
+await rv.evaluate(() => document.getElementById('ordRev').scrollIntoView()); await rv.screenshot({ path: OUT + '/sb-review-form-phone.jpg', type: 'jpeg', quality: 70 });
+await rv.setViewportSize({ width: 1366, height: 860 });
+await rv.evaluate(() => { location.hash = 'p/bags-4'; }); await rv.waitForSelector('#ptabs', { timeout: 15000 });
+await rv.click('#ptabs button[data-t=r]'); await rv.waitForSelector('#revBox .rev', { timeout: 15000 });
+const revTxt = await rv.textContent('#revBox');
+check('product page: average, count, the review with "Verified purchase"', /4\/5/.test(revTxt.replace(/\s/g, '')) && /1 rating/.test(revTxt) && /Ruwani F\./.test(revTxt) && /Verified purchase/.test(revTxt) && /Nice leather/.test(revTxt), revTxt.slice(0, 160));
+check('product page never shows the full name or phone', !/Fernando|0771112233/.test(revTxt));
+await rv.evaluate(() => document.getElementById('revBox').scrollIntoView()); await rv.screenshot({ path: OUT + '/sb-reviews-pdp.jpg', type: 'jpeg', quality: 70 });
+// staff: Reviews page, reply, hide
+await ap.evaluate(() => { location.hash = 'dashboard'; }); await ap.waitForTimeout(600);
+check('Reviews menu for the main admin', await ap.isVisible('#sideNav a[data-v=reviews]'));
+await ap.evaluate(() => { location.hash = 'reviews'; }); await ap.waitForSelector('.rv-card', { timeout: 15000 });
+check('admin sees the buyer, order and review', /Ruwani F\.[\s\S]*Ruwani Fernando|Ruwani Fernando[\s\S]*Ruwani F\./.test(await ap.textContent('#view')) && /SC-[\s\S]*Nice leather|Nice leather[\s\S]*SC-/.test(await ap.textContent('#view')));
+await ap.screenshot({ path: OUT + '/sb-admin-reviews.jpg', type: 'jpeg', quality: 70 });
+await ap.fill('.rv-card textarea', 'Thank you, Ruwani!'); await ap.click('.rv-card [data-act=reply]'); await ap.waitForTimeout(1500);
+check('reply saved', sql(`SELECT reply FROM app.product_reviews`) === 'Thank you, Ruwani!');
+await rv.click('#ptabs button[data-t=d]'); await rv.click('#ptabs button[data-t=r]'); await rv.waitForSelector('#revBox .rev-reply', { timeout: 15000 });
+check('the reply shows under the review on the website', /Response from Source Connect[\s\S]*Thank you, Ruwani!/.test(await rv.textContent('#revBox')));
+ap.once('dialog', d => d.accept()); await ap.click('.rv-card [data-act=hide]'); await ap.waitForTimeout(1500);
+check('hidden: off the website and out of the average', sql(`SELECT status FROM app.product_reviews`) === 'hidden' && sql(`SELECT reviews_count FROM app.products WHERE slug = 'bags-4'`) === '0');
+await rv.click('#ptabs button[data-t=d]'); await rv.click('#ptabs button[data-t=r]'); await rv.waitForTimeout(1500);
+check('product page shows no reviews after hiding', /No reviews yet/.test(await rv.textContent('#revBox')));
+await rvC.close();
+
 // 11. usage page (main admin)
 await ap.evaluate(() => { location.hash = 'usage'; }); await ap.waitForSelector('.use-row', { timeout: 15000 });
 const use = await ap.$$eval('.use-row .use-head', l => l.map(x => x.textContent.replace(/\s+/g, ' ').trim()));

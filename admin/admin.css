@@ -453,3 +453,14 @@ body.pv-dragging iframe { pointer-events: none; }
 #rnf label.chk { display: flex; align-items: center; gap: 8px; flex-direction: row; padding-left: 0; text-indent: 0; }
 #rnf label.chk input { width: 18px; height: 18px; margin: 0; }
 @media (max-width: 700px) { .rn-banner { margin: 12px 16px 0; } }
+
+/* product reviews */
+.rv-card { display: grid; gap: 6px; margin-bottom: 12px; }
+.rv-card.rv-hidden { opacity: .75; border-style: dashed; }
+.rv-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rv-stars { color: #f5a524; letter-spacing: 1px; font-size: 15px; }
+.rv-stars span { color: #d7dbe5; }
+.rv-text { margin: 4px 0; white-space: pre-line; overflow-wrap: anywhere; }
+.rv-reply { display: grid; gap: 4px; font-size: 13px; font-weight: 600; }
+.rv-reply textarea { font: inherit; font-weight: 400; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; resize: vertical; }
+.rv-actions { display: flex; gap: 8px; flex-wrap: wrap; }

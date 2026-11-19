@@ -104,3 +104,15 @@
   Email ona nê. E kena log wenne username + password eken, ita passe PIN eka hari app code eka hari. Palamu login eke password eka wenas karanna kiyanawa.
 - Username eka wenas karanna (oyage ma eka ath ulathwa): **Staff & Roles → Edit → Username** → **Save**. Email nathi account ekak nam e kena eeta passe log wenne aluth username eken. Email ekak thiyena account ekak (udaharanayak main admin) log wenne kalin widiyatama e email eken. Wena kenek use karana username ekak denna bæ.
 - Ekama kenekuge verify krama eka passe wenas karanna: **Edit → Verify with**. Oyage ma account eke lock wenna puluwan wenas kirima system eka nawaththanawa.
+
+## Product reviews (stars + customer opinion)
+- Review karanna puluwan **order eka deliver una customer ta witharai** (ethakota hæma review ekakma "Verified purchase"). Order eka Admin eke **Delivered** kalama, customer ge order page eke **Rate your items** kotasa penawa: stars 1–5 saha kæmathi nam opinion ekak.
+  - Account ekak thiyena customer: **My account → My orders → ★ Rate & review**.
+  - Guest widiyata order karapu customer: order eka karapu phone/computer eke "Orders placed on this device" eken.
+- Eka order ekaka eka product ekakata review ekai. Customer ta eka passe wenas karanna puluwan. Links (www…, .com) danna denne nê.
+- Website eke penne **"Nimal P."** wage kota nama witharai. Sampurna nama, phone number, address, order number penne nê.
+- Product page eke **Ratings** tab eke average eka, 5★…1★ ganan (click karala filter karanna puluwan) saha aluthma reviews pennanawa.
+- **Admin → Reviews** (main admin, co-admin, ops manager, support):
+  - **1–2 stars**, **Not answered**, **Hidden** walin filter karanna.
+  - **Reply**: oyage reply eka review eka yatin "Response from Source Connect" kiyala penawa.
+  - **Hide from the website**: abusive, topic ekata adala nathi, nathnam kenekuge private details thiyena review witharak hide karanna. Negative kiyala hide karanna epa; polite reply ekak denna. Hide kalama e review eka average eken ain wenawa. Customer eka edit kalath hide wela thiyena eka hide wela ma thiyenawa.

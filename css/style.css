@@ -365,6 +365,25 @@ main { min-height: 60vh; padding-bottom: 40px; }
 .rbars div { display: grid; grid-template-columns: 30px 1fr 40px; gap: 8px; align-items: center; }
 .rbars i { height: 8px; border-radius: 4px; background: #eef0f5; overflow: hidden; display: block; }
 .rbars i em { display: block; height: 100%; background: #f5a524; }
+.rbars button { display: grid; grid-template-columns: 30px 1fr 40px; gap: 8px; align-items: center; background: none; border: 0; padding: 2px 4px; margin: 0 -4px; font: inherit; color: inherit; cursor: pointer; border-radius: 6px; text-align: left; }
+.rbars button:hover, .rbars button.on { background: #f3f5fa; }
+.rev-filter { display: flex; gap: 10px; align-items: center; margin: 18px 0 4px; font-size: 13px; color: var(--muted); }
+.rev { padding: 14px 0; border-top: 1px solid var(--line, #e6e8ef); }
+.rev-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rev-top .stars svg { width: 13px; height: 13px; }
+.rev-ok { font-size: 11px; color: #15803d; font-weight: 600; }
+.rev-meta { display: block; margin-top: 2px; color: var(--muted); font-size: 12px; }
+.rev-text { margin: 8px 0 0; white-space: pre-line; overflow-wrap: anywhere; }
+.rev-reply { margin-top: 10px; padding: 10px 12px; background: #f3f5fa; border-radius: 8px; font-size: 13px; }
+.rev-reply p { margin: 4px 0 0; white-space: pre-line; overflow-wrap: anywhere; }
+.rev-form { display: grid; gap: 8px; padding: 14px 0; border-top: 1px solid var(--line, #e6e8ef); }
+.rev-form textarea { width: 100%; box-sizing: border-box; font: inherit; padding: 10px 12px; border: 1px solid #d7dbe5; border-radius: 8px; resize: vertical; }
+.rev-form .btn { justify-self: start; }
+.star-pick { display: flex; gap: 4px; }
+.star-pick button { width: 40px; height: 40px; display: grid; place-items: center; background: none; border: 0; padding: 0; cursor: pointer; color: #d7dbe5; border-radius: 8px; }
+.star-pick button.on { color: #f5a524; }
+.star-pick button:focus-visible { outline: 2px solid var(--navy); }
+.star-pick svg { width: 30px; height: 30px; fill: currentColor; }
 
 /* ---------- Cart / checkout ---------- */
 .cart-wrap { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; align-items: start; }
