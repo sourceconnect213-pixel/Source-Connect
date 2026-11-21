@@ -2,6 +2,9 @@
 -- restore: the restored copy must have at least as many rows. Prints one JSON line.
 -- security_fingerprint = hash of every permission that protects the data (function grants, SECURITY DEFINER + search_path,
 -- table grants, row level security flags, policies). A restore must reproduce it EXACTLY.
+-- Fixed search path: policy expressions are printed with full names (auth.uid(), not uid()) whatever the connection's
+-- own search path is, so the same permissions always give the same fingerprint (the restored copy's server differs).
+SET search_path = pg_catalog;
 SELECT json_build_object(
   'orders', (SELECT count(*) FROM app.orders), 'order_items', (SELECT count(*) FROM app.order_items),
   'payments', (SELECT count(*) FROM app.payments), 'payment_events', (SELECT count(*) FROM app.payment_events),
