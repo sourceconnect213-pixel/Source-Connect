@@ -1420,14 +1420,14 @@
     // hide menu items this person cannot use
     var NEED = { dashboard: 'dashboard.view', orders: 'orders.read', customers: 'customers.read', products: 'catalog.read', flash: 'content.write', categories: 'catalog.write', origins: 'settings.write',
       collections: 'catalog.read', homepage: 'content.write', banners: 'content.write', header: 'content.write', pages: 'content.write', settings: 'content.write', editor: 'catalog.read',
-      staff: 'staff.manage', audit: 'audit.read', backups: 'backups.read', coupons: 'coupons.manage', reports: 'reports.view', renewals: 'renewals.manage', access: 'dashboard.view', usage: 'usage.view', reviews: 'reviews.manage' };
+      staff: 'staff.manage', audit: 'audit.read', backups: 'backups.read', coupons: 'coupons.manage', reports: 'reports.view', renewals: 'renewals.manage', access: 'dashboard.view', usage: 'usage.view', reviews: 'reviews.manage', returns: 'returns.manage' };
     // plain names for what can be asked for / given on top of a role
     var PERM_NAME = { 'dashboard.view': 'Dashboard', 'reports.view': 'Sales & profit reports', 'costs.write': 'Cost prices', 'catalog.read': 'See products',
       'catalog.write': 'Add and edit products, photos, categories and collections', 'inventory.adjust': 'Change stock', 'orders.read': 'See orders',
       'orders.update': 'Change order and shipment status', 'payments.read': 'See payment details', 'payments.verify': 'Confirm bank transfers and cash collected',
       'refunds.create': 'Refunds and cancelling paid orders', 'customers.read': 'See customer names, phones and addresses', 'customers.write': 'Edit or disable customer accounts',
       'content.write': 'Banners, homepage, header/footer, pages and flash sale', 'settings.write': 'Delivery fees, payment options and import countries',
-      'coupons.manage': 'Promo codes', 'usage.view': 'Hosting usage (database, photos, users)', 'audit.read': 'Audit log', 'backups.read': 'Backup status', 'renewals.manage': 'Renewal reminders', 'reviews.manage': 'Product reviews (hide and reply)' };
+      'coupons.manage': 'Promo codes', 'usage.view': 'Hosting usage (database, photos, users)', 'audit.read': 'Audit log', 'backups.read': 'Backup status', 'renewals.manage': 'Renewal reminders', 'reviews.manage': 'Product reviews (hide and reply)', 'returns.manage': 'Return / refund requests' };
     var permName = function (c, d) { return PERM_NAME[c] || d || c; };
     function applyPermissions() {
       var nav = $('#sideNav');
@@ -1438,6 +1438,10 @@
       if (!$('#sideNav [data-v=usage]')) {
         var rep = $('#sideNav a[data-v=reports]');
         if (rep) rep.insertAdjacentHTML('afterend', '<a href="#usage" data-v="usage"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9M12 12l5-5M12 3v4M21 12h-4"/></svg>Usage</a>');
+      }
+      if (!$('#sideNav [data-v=returns]')) {
+        var ord = $('#sideNav a[data-v=orders]');
+        if (ord) ord.insertAdjacentHTML('afterend', '<a href="#returns" data-v="returns"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3"/></svg>Returns <span class="pill" id="rtPill"></span></a>');
       }
       if (!$('#sideNav [data-v=reviews]')) {
         var prod = $('#sideNav a[data-v=products]');
@@ -1455,8 +1459,14 @@
       }
       $$('#sideNav a[data-v]').forEach(function (a) { var p = NEED[a.dataset.v]; a.hidden = !!(p && !can(p)); });
       var who = $('.side-brand small'); if (who && me) who.textContent = (me.displayName || me.username).toUpperCase() + ' · ' + (me.mainAdmin ? 'MAIN ADMIN' : 'CO-ADMIN');
-      checkRenewals(); checkAccessRequests();
+      checkRenewals(); checkAccessRequests(); checkReturns();
     }
+    // how many return requests wait for a first answer (shown on "Returns")
+    function checkReturns() {
+      if (!me || !can('returns.manage')) return;
+      SCG.api('GET', '/admin/returns?filter=requested').then(function (d) { var p = $('#rtPill'); if (p) p.textContent = d.counts.requested ? String(d.counts.requested) : ''; }, function () {});
+    }
+    window.addEventListener('hashchange', function () { if (me) checkReturns(); });   // new requests show up while staff move around the admin
     // main admin: how many access requests wait for an answer (shown on "Staff & Roles")
     function checkAccessRequests() {
       if (!me || !can('staff.manage')) return;
@@ -1466,6 +1476,79 @@
     // ---------- usage: how much of the hosting plan is used ----------
     // Plan amounts from the Supabase and Cloudflare documentation (checked 2026-11-16). Update here if the plan changes.
     var PLAN = { diskGB: 8, storageGB: 100, mau: 100000, egressGB: 250 };
+    // ---------- return / refund requests ----------
+    var RET_REASON = { damaged: 'Arrived damaged', not_working: 'Does not work / faulty', wrong_item: 'Wrong item sent', not_as_described: 'Different from the description or photos', missing_parts: 'Parts or items missing' };
+    var RET_STATUS = { requested: 'Waiting for you', approved: 'Approved', rejected: 'Rejected', received: 'Item received', refunded: 'Refunded', replaced: 'Replacement sent', cancelled: 'Withdrawn by customer' };
+    VIEWS.returns = { title: 'Returns', sub: 'Return and refund requests from customers after delivery', render: function (v) {
+      var st = { filter: 'open', list: [], canRefund: false }, h0 = location.hash;
+      var PAY = { cod: 'Cash on Delivery', bank_transfer: 'Bank transfer', payhere: 'Card (PayHere)' };
+      function card(x) {
+        var itemsTotal = x.items.reduce(function (n, it) { return n + it.unitPrice * it.qty; }, 0);
+        var left = Math.max(0, Math.round((x.orderTotal - x.refundedSoFar) * 100) / 100), suggest = Math.min(itemsTotal, left);
+        var act = '';
+        if (x.status === 'requested') act = '<button class="btn sm primary" data-act="approve">Approve</button><button class="btn sm danger" data-act="reject">Reject</button>';
+        if (x.status === 'approved') act = '<label class="chk"><input type="checkbox" class="rt-restock" checked> Put the items back in stock</label><button class="btn sm primary" data-act="receive">Item received</button><button class="btn sm danger" data-act="reject">Reject</button>';
+        if (x.status === 'received') act = '<button class="btn sm primary" data-act="replace">Replacement sent</button>';
+        var refund = st.canRefund && (x.status === 'approved' || x.status === 'received') ?
+          '<div class="rt-refund"><b>Refund</b> <small class="muted">(order total ' + rs(x.orderTotal) + (x.refundedSoFar ? ', already refunded ' + rs(x.refundedSoFar) : '') + ')</small><div class="rt-refund-row">' +
+            '<label>Amount (Rs.)<input type="number" class="rt-amount" min="0.01" step="0.01" max="' + left + '" value="' + suggest + '"></label>' +
+            '<label>Reference<input class="rt-ref" maxlength="80" placeholder="' + (x.paymentMethod === 'payhere' ? 'PayHere refund ID' : 'Bank transfer reference') + '"></label>' +
+            '<button class="btn sm primary" data-act="refund">Record refund</button></div>' +
+            (x.paymentMethod === 'payhere' ? '<small class="muted">Refund the card first in the PayHere merchant portal, then record it here.</small>' : '<small class="muted">Transfer the money to the account below first, then record it here.</small>') + '</div>' : '';
+        return '<div class="panel rt-card" data-id="' + x.id + '"><div class="rt-head"><b>Return #' + x.id + '</b><span class="pill">' + esc(RET_STATUS[x.status] || x.status) + '</span><span class="muted">order ' + esc(x.order) + ' · ' + when(x.createdAt) + '</span></div>' +
+          '<div class="rt-grid"><div><small class="muted">Customer</small><br><b>' + esc(x.customer) + '</b> · ' + esc(x.phone) + '</div>' +
+            '<div><small class="muted">Payment</small><br>' + esc(PAY[x.paymentMethod] || x.paymentMethod) + ' · ' + esc(String(x.paymentStatus).replace(/_/g, ' ')) + '</div>' +
+            '<div><small class="muted">Delivered</small><br>' + (x.deliveredAt ? when(x.deliveredAt) : '—') + '</div>' +
+            '<div><small class="muted">Customer wants</small><br><b>' + (x.wants === 'refund' ? 'Money back' : 'Replacement') + '</b></div></div>' +
+          '<ul class="rt-items">' + x.items.map(function (it) { return '<li>' + esc(it.name) + (it.variant ? ' <small class="muted">' + esc(it.variant) + '</small>' : '') + ' × ' + it.qty + ' <small class="muted">(' + rs(it.unitPrice) + ' each)</small></li>'; }).join('') + '</ul>' +
+          '<p style="margin:6px 0"><b>' + esc(RET_REASON[x.reason] || x.reason) + ':</b> <span class="rt-text">' + esc(x.details) + '</span></p>' +
+          (x.photos.length ? '<div class="rt-photos">' + x.photos.map(function (ph, i) { return '<button type="button" class="rt-ph" data-ph="' + esc(ph) + '">Photo ' + (i + 1) + '</button>'; }).join('') + '</div>' : '<p class="muted" style="margin:4px 0;font-size:13px">No photos.</p>') +
+          (x.bank ? '<div class="rt-bank"><small class="muted">Pay the refund into</small><br>' + esc(x.bank.bank) + (x.bank.branch ? ', ' + esc(x.bank.branch) : '') + ' · ' + esc(x.bank.accountName) + ' · <b>' + esc(x.bank.accountNumber) + '</b></div>' : '') +
+          (x.refund ? '<p style="margin:6px 0;color:#15803d"><b>Refunded ' + rs(x.refund) + '</b> · ref ' + esc(x.refundReference || '') + '</p>' : '') +
+          (x.restocked ? '<p class="muted" style="margin:4px 0;font-size:13px">Items were put back in stock.</p>' : '') +
+          (act || refund ? '<label class="rt-note">Message to the customer <small class="muted">(shown on their order; required when rejecting)</small><textarea maxlength="500" rows="2">' + esc(x.staffNote || '') + '</textarea></label>' +
+            '<div class="rv-actions">' + act + '</div>' + refund
+            : (x.staffNote ? '<div class="rt-msg"><small class="muted">Your message</small><br>' + esc(x.staffNote) + '</div>' : '')) + '</div>';
+      }
+      function load(more) {
+        if (!more) st.list = [];
+        SCG.api('GET', '/admin/returns?filter=' + st.filter + '&offset=' + st.list.length).then(function (d) { if (location.hash !== h0) return;
+          st.list = st.list.concat(d.requests); st.canRefund = d.canRefund; var c = d.counts;
+          var total = { open: c.open, requested: c.requested, approved: c.approved, received: c.received, closed: c.closed, all: c.all }[st.filter];
+          var pill = $('#rtPill'); if (pill) pill.textContent = c.requested ? String(c.requested) : '';
+          v.innerHTML = '<div class="filters">' + [['open', 'Open', c.open], ['requested', 'Waiting for you', c.requested], ['approved', 'Approved', c.approved], ['received', 'Received', c.received], ['closed', 'Closed', c.closed], ['all', 'All', c.all]].map(function (f) {
+              return '<button class="btn sm' + (st.filter === f[0] ? ' primary' : '') + '" data-f="' + f[0] + '">' + f[1] + ' (' + f[2] + ')</button>'; }).join('') + '</div>' +
+            '<p class="muted" style="margin-top:0;font-size:13px">Steps: <b>Approve</b> (or Reject with a reason) → collect the item → <b>Item received</b> (tick “back in stock” if it can be sold again) → <b>Replacement sent</b> or <b>Record refund</b>. ' +
+              (d.canRefund ? 'Recording a refund needs the money to be paid back first.' : 'Recording a refund needs the “Refunds” permission (main admin / finance).') + '</p>' +
+            (st.list.length ? st.list.map(card).join('') : '<div class="panel"><p class="muted" style="margin:0">' + (st.filter === 'open' ? 'No open return requests.' : 'Nothing here.') + '</p></div>') +
+            (st.list.length < total ? '<button class="btn" id="rtMore">Show more</button>' : '');
+        }, function (err) { if (location.hash !== h0) return; v.innerHTML = '<p class="muted">' + esc(err.message) + '</p>'; });
+      }
+      v.innerHTML = '<p class="muted">Loading…</p>';
+      v.onclick = function (e) {
+        var f = e.target.closest('[data-f]'); if (f) { st.filter = f.dataset.f; load(false); return; }
+        if (e.target.closest('#rtMore')) { load(true); return; }
+        var ph = e.target.closest('[data-ph]');
+        if (ph) { var w = window.open('', '_blank'); SCG.api('POST', '/admin/returns/photo', { path: ph.dataset.ph }).then(function (r) { if (w) w.location = r.url; else location.href = r.url; }, function (err) { if (w) w.close(); fail(err); }); return; }
+        var b = e.target.closest('[data-act]'); if (!b) return;
+        var c = b.closest('.rt-card'), act = b.dataset.act, note = (c.querySelector('.rt-note textarea') || {}).value || '', data = {};
+        if (act === 'reject' && note.trim().length < 5) { toast('Write the reason for the customer first'); c.querySelector('.rt-note textarea').focus(); return; }
+        if (act === 'receive') data.restock = !!(c.querySelector('.rt-restock') || {}).checked;
+        if (act === 'refund') {
+          data.amount = Number(c.querySelector('.rt-amount').value); data.reference = c.querySelector('.rt-ref').value.trim();
+          if (!(data.amount > 0)) { toast('Enter the refund amount'); return; }
+          if (data.reference.length < 3) { toast('Enter the refund reference'); return; }
+          if (!confirm('Record a refund of Rs. ' + data.amount.toLocaleString() + ' for return #' + c.dataset.id + '? This cannot be undone.')) return;
+        }
+        if (act === 'reject' && !confirm('Reject return #' + c.dataset.id + '? The customer will see your message.')) return;
+        b.disabled = true;
+        SCG.api('PUT', '/admin/returns/' + c.dataset.id, { action: act, note: note.trim(), data: data }).then(function () {
+          toast({ approve: 'Approved', reject: 'Rejected', receive: 'Marked as received', replace: 'Marked as replaced', refund: 'Refund recorded' }[act]); load(false);
+        }, function (err) { b.disabled = false; fail(err); });
+      };
+      load(false);
+    } };
+
     // ---------- product reviews: written by buyers after delivery; staff hide abuse and reply ----------
     VIEWS.reviews = { title: 'Reviews', sub: 'Ratings and opinions from customers who received their order', render: function (v) {
       var st = { filter: 'all', list: [] }, h0 = location.hash;

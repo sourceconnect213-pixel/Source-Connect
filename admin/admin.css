@@ -468,3 +468,20 @@ body.pv-dragging iframe { pointer-events: none; }
 /* registered customer accounts */
 .cust-cell { display: flex; gap: 10px; align-items: center; }
 .cust-ph { width: 34px; height: 34px; flex: none; border-radius: 50%; object-fit: cover; display: grid; place-items: center; background: var(--navy); color: #fff; font-weight: 700; font-size: 13px; }
+
+/* return / refund requests */
+.rt-card { display: grid; gap: 8px; margin-bottom: 12px; }
+.rt-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.rt-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; font-size: 13.5px; }
+@media (max-width: 900px) { .rt-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.rt-items { margin: 0; padding-left: 18px; font-size: 14px; }
+.rt-text { white-space: pre-line; overflow-wrap: anywhere; }
+.rt-photos { display: flex; gap: 8px; flex-wrap: wrap; }
+.rt-ph { border: 1px solid var(--line); background: #f6f7fb; border-radius: 8px; padding: 6px 10px; cursor: pointer; font: inherit; font-size: 13px; }
+.rt-bank, .rt-msg { background: #f6f7fb; border-radius: 8px; padding: 8px 10px; font-size: 13.5px; overflow-wrap: anywhere; }
+.rt-note { display: grid; gap: 4px; font-size: 13px; font-weight: 600; }
+.rt-note textarea { font: inherit; font-weight: 400; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; resize: vertical; }
+.rt-refund { border-top: 1px dashed var(--line); padding-top: 8px; display: grid; gap: 6px; }
+.rt-refund-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+.rt-refund-row label { display: grid; gap: 4px; font-size: 13px; }
+.rt-refund-row input { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; width: 180px; max-width: 100%; }

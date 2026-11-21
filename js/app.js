@@ -889,8 +889,9 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
           '<div class="sum-row"><span>Delivery</span><span>' + (o.shipping ? money(o.shipping) : 'FREE') + '</span></div>' + (o.discount ? '<div class="sum-row"><span>Promo code</span><span>−' + money(o.discount) + '</span></div>' : '') +
           '<div class="sum-row total"><span>Total</span><span>' + money(o.total) + '</span></div></div>' +
           (o.customer && o.customer.address ? '<p class="muted" style="font-size:13px">Delivering to ' + esc(o.customer.name) + ', ' + esc(o.customer.address) + ', ' + esc(o.customer.city) + ', ' + esc(o.customer.district) + '</p>' : '') +
-          (o.status === 'delivered' ? '<div id="ordRev"></div>' : '');
+          (o.status === 'delivered' ? '<div id="ordRev"></div>' : '') + (o.status === 'delivered' || o.status === 'refunded' ? '<div id="ordRet"></div>' : '');
         if (o.status === 'delivered') orderReviewsUI(number, mine && mine.token);
+        if (o.status === 'delivered' || o.status === 'refunded') returnsUI(number, mine && mine.token, $('#ordRet'));
         if (waiting && tries++ < 40) setTimeout(function () { if (location.hash === '#order/' + number) load(); }, 4000);
       }, function () {
         $('#ordBox').innerHTML = '<h2 style="margin-top:0">Order ' + esc(number) + '</h2><p>This order is not saved on this device. Track it with your phone number instead:</p><p><a class="btn navy" href="#track/' + esc(number) + '">Track with phone number</a></p>';
@@ -922,13 +923,13 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
     if (f.size > PHOTO_MAX) return 'The photo is ' + (f.size / 1048576).toFixed(1) + ' MB. Choose one up to 2 MB.';
     return '';
   }
-  function shrinkPhoto(f) {
+  function shrinkPhoto(f, maxPx) {
     return new Promise(function (resolve) {
       try {
         var url = URL.createObjectURL(f), img = new Image();
         img.onload = function () {
           try {
-            var k = Math.min(1, 512 / Math.max(img.naturalWidth, img.naturalHeight)), c = document.createElement('canvas');
+            var k = Math.min(1, (maxPx || 512) / Math.max(img.naturalWidth, img.naturalHeight)), c = document.createElement('canvas');
             c.width = Math.max(1, Math.round(img.naturalWidth * k)); c.height = Math.max(1, Math.round(img.naturalHeight * k));
             var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(img, 0, 0, c.width, c.height);
             URL.revokeObjectURL(url);
@@ -958,6 +959,88 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
   }
   function districtOptions(sel) { return '<option value="">Choose…</option>' + DISTRICTS.map(function (d) { return '<option' + (d === sel ? ' selected' : '') + '>' + d + '</option>'; }).join(''); }
   var PHONE = 'pattern="[+]?[0-9][0-9 ]{8,14}" title="A phone number, e.g. 077 123 4567"';
+
+  // ---------- return / refund requests (API mode): buyers of a delivered order, inside the return window ----------
+  var RET_REASON = { damaged: 'Arrived damaged', not_working: 'Does not work / faulty', wrong_item: 'Wrong item sent', not_as_described: 'Different from the description or photos', missing_parts: 'Parts or items missing' };
+  var RET_STATUS = { requested: 'Waiting for the shop', approved: 'Approved', rejected: 'Not accepted', received: 'Item received by the shop', refunded: 'Refunded', replaced: 'Replacement sent', cancelled: 'Withdrawn' };
+  var RET_NEXT = { requested: 'We will check your request and reply here.', approved: 'Please keep the item and all its parts ready. We will contact you to collect it, or tell you where to send it.',
+    received: 'We have the item and are finishing your refund or replacement.' };
+  function fileToDataUrl(b) { return new Promise(function (ok, no) { var r = new FileReader(); r.onload = function () { ok(r.result); }; r.onerror = function () { no(new Error('The photo could not be read.')); }; r.readAsDataURL(b); }); }
+  function returnsUI(number, token, box) {
+    if (!box) return;
+    SCG.api('POST', '/orders/returns', { number: number, token: token || null }).then(function (d) {
+      if (!document.body.contains(box)) return;
+      var bankNeeded = d.paymentMethod === 'cod' || d.paymentMethod === 'bank_transfer';
+      var reqs = d.requests.map(function (q) {
+        return '<div class="ret-req"><div class="ret-req-top"><b>Return request #' + q.id + '</b><span class="ret-st ' + esc(q.status) + '">' + esc(RET_STATUS[q.status] || q.status) + '</span></div>' +
+          '<small class="muted">' + new Date(q.createdAt).toLocaleDateString() + ' · ' + esc(RET_REASON[q.reason] || q.reason) + ' · ' + (q.wants === 'refund' ? 'Refund' : 'Replacement') + (q.photos ? ' · ' + q.photos + ' photo' + (q.photos === 1 ? '' : 's') : '') + '</small>' +
+          '<ul class="ret-items">' + q.items.map(function (it) { return '<li>' + esc(it.name) + (it.variant ? ' <small class="muted">' + esc(it.variant) + '</small>' : '') + ' ×' + it.qty + '</li>'; }).join('') + '</ul>' +
+          (q.staffNote ? '<div class="rev-reply"><b>Message from Source Connect</b><p>' + esc(q.staffNote) + '</p></div>' : '') +
+          (q.refund ? '<p class="ret-ok">Refunded ' + money(q.refund) + '</p>' : '') +
+          (RET_NEXT[q.status] ? '<p class="muted" style="margin:6px 0 0;font-size:13px">' + RET_NEXT[q.status] + '</p>' : '') +
+          (q.status === 'requested' ? '<button type="button" class="link-sm" data-ret-cancel="' + q.id + '">Withdraw this request</button>' : '') + '</div>';
+      }).join('');
+      var can = d.items.filter(function (it) { return it.returnable > 0; });
+      var form = !d.eligible ? '<p class="muted" style="margin:8px 0">' + esc(d.message) + '</p>' :
+        '<form class="ret-form form"><p class="full muted" style="margin:0;font-size:13px">You can ask within ' + d.windowDays + ' days of delivery' + (d.deadline ? ' (until ' + new Date(d.deadline).toLocaleDateString() + ')' : '') + '. Change of mind is not a reason for a return.</p>' +
+          '<div class="full"><b>Which items?</b>' + can.map(function (it) {
+            return '<label class="ret-item"><input type="checkbox" name="it" value="' + esc(it.id) + '"><span>' + esc(it.name) + (it.variant ? ' <small class="muted">' + esc(it.variant) + '</small>' : '') + '</span>' +
+              (it.returnable > 1 ? '<select data-q="' + esc(it.id) + '" aria-label="How many">' + Array.from({ length: it.returnable }, function (_, i) { return '<option>' + (i + 1) + '</option>'; }).join('') + '</select>' : '<span class="muted">×1</span>') + '</label>';
+          }).join('') + '</div>' +
+          '<label class="full">Reason<select name="reason" required><option value="">Choose…</option>' + Object.keys(RET_REASON).map(function (k) { return '<option value="' + k + '">' + RET_REASON[k] + '</option>'; }).join('') + '</select></label>' +
+          '<label class="full">What is wrong?<textarea name="details" rows="3" required minlength="10" maxlength="1000" placeholder="Tell us what happened (at least 10 characters)"></textarea></label>' +
+          '<div class="full"><b>What would you like?</b><br><label class="chk"><input type="radio" name="wants" value="refund" checked> Money back (refund)</label> <label class="chk"><input type="radio" name="wants" value="replacement"> A replacement</label></div>' +
+          (bankNeeded ? '<div class="full ret-bank"><b>Bank account for the refund</b><div class="ret-bank-grid">' +
+              '<label>Bank<input name="bank" maxlength="60" placeholder="e.g. Commercial Bank"></label><label>Branch<input name="branch" maxlength="60"></label>' +
+              '<label>Account holder<input name="accountName" maxlength="80"></label><label>Account number<input name="accountNumber" maxlength="30" inputmode="numeric" pattern="[0-9 \\-]{4,30}"></label></div></div>'
+            : '<p class="full muted ret-card" style="margin:0;font-size:13px">A refund goes back to the card you paid with.</p>') +
+          '<div class="full"><b>Photos</b> <small class="muted">(up to 3, JPEG/PNG/WebP, 2 MB each — they help us decide faster)</small><br><input type="file" name="photos" accept="image/jpeg,image/png,image/webp" multiple><div class="ret-thumbs"></div><div class="pp-err ret-perr"></div></div>' +
+          '<button class="btn navy">Send request</button></form>';
+      box.innerHTML = '<h3 style="margin:14px 0 6px">Return / Refund</h3>' + reqs + form;
+      var f = box.querySelector('.ret-form'), files = [];
+      if (f) {
+        var bankBox = f.querySelector('.ret-bank'), card = f.querySelector('.ret-card');
+        var syncWants = function () { var w = (f.querySelector('input[name=wants]:checked') || {}).value;
+          if (bankBox) { bankBox.style.display = w === 'refund' ? '' : 'none'; $$('input', bankBox).forEach(function (i) { i.required = w === 'refund' && i.name !== 'branch'; }); }
+          if (card) card.style.display = w === 'refund' ? '' : 'none'; };
+        f.addEventListener('change', function (e) {
+          if (e.target.name === 'wants') syncWants();
+          if (e.target.name === 'photos') {
+            var list = Array.prototype.slice.call(e.target.files || []), bad = '';
+            if (list.length > 3) bad = 'Choose up to 3 photos.';
+            list.forEach(function (x) { bad = bad || photoProblem(x); });
+            f.querySelector('.ret-perr').textContent = bad;
+            files = bad ? [] : list; if (bad) e.target.value = '';
+            f.querySelector('.ret-thumbs').innerHTML = files.map(function (x) { return '<img src="' + URL.createObjectURL(x) + '" alt="">'; }).join('');
+          }
+        });
+        syncWants();
+        f.onsubmit = function (e) {
+          e.preventDefault(); var E = f.elements, btn = f.querySelector('button.btn');
+          var items = $$('input[name=it]:checked', f).map(function (c) { var s = f.querySelector('select[data-q="' + c.value + '"]'); return { id: c.value, qty: s ? +s.value : 1 }; });
+          if (!items.length) { toast('Choose the item(s) to return'); return; }
+          var wants = (f.querySelector('input[name=wants]:checked') || {}).value;
+          var data = { items: items, reason: E.reason.value, details: E.details.value.trim(), wants: wants };
+          if (bankBox && wants === 'refund') data.bank = { bank: E.bank.value.trim(), branch: E.branch.value.trim(), accountName: E.accountName.value.trim(), accountNumber: E.accountNumber.value.trim() };
+          btn.disabled = true; btn.textContent = files.length ? 'Sending photos…' : 'Sending…';
+          var paths = [];
+          files.reduce(function (p, x) {
+            return p.then(function () { return shrinkPhoto(x, 1280); }).then(fileToDataUrl)
+              .then(function (u) { return SCG.api('POST', '/orders/returns/photo', { number: number, token: token || null, image: u }); })
+              .then(function (r) { paths.push(r.path); });
+          }, Promise.resolve())
+            .then(function () { data.photos = paths; return SCG.api('POST', '/orders/returns/create', { number: number, token: token || null, data: data }); })
+            .then(function () { toast('Your return request was sent. We will reply here.'); returnsUI(number, token, box); },
+              function (err) { btn.disabled = false; btn.textContent = 'Send request'; toast(err.message); });
+        };
+      }
+      box.onclick = function (e) {
+        var c = e.target.closest('[data-ret-cancel]'); if (!c) return;
+        if (!confirm('Withdraw this return request?')) return;
+        SCG.api('POST', '/orders/returns/cancel', { number: number, token: token || null, id: +c.dataset.retCancel }).then(function () { toast('Request withdrawn'); returnsUI(number, token, box); }, function (err) { toast(err.message); });
+      };
+    }, function (err) { if (document.body.contains(box)) box.innerHTML = '<p class="muted" style="margin:8px 0">' + esc(err.message) + '</p>'; });
+  }
 
   function renderAccountApi() {
     setTitle('My account');
@@ -1026,10 +1109,15 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
         var idx = ST_IDX[o.status] === undefined ? -1 : ST_IDX[o.status], bad = { cancelled: 1, expired: 1, refunded: 1 }[o.status];
         return '<div class="acct-order"><div class="ao-top"><b>' + esc(o.number) + '</b><span class="ao-status ' + (bad ? 'x' : o.status === 'delivered' ? 'ok' : '') + '">' + esc(ST_LABEL[o.status] || o.status) + '</span><span class="muted">' + new Date(o.placedAt).toLocaleDateString() + ' · ' + money(o.total) + '</span></div>' +
           (!bad ? '<div class="ao-bar">' + [0, 1, 2, 3, 4].map(function (i) { return '<i class="' + (i <= idx ? 'on' : '') + '"></i>'; }).join('') + '</div>' : '') +
-          '<div class="ao-actions"><a class="link-sm" href="#order/' + esc(o.number) + '">Details</a>' + (o.status === 'delivered' ? ' <button type="button" class="btn sm rev-open" data-rev="' + esc(o.number) + '">★ Rate &amp; review</button>' : '') + '</div>' +
-          (o.status === 'delivered' ? '<div class="ao-rev" id="rev-' + esc(o.number) + '" hidden></div>' : '') + '</div>';
+          '<div class="ao-actions"><a class="link-sm" href="#order/' + esc(o.number) + '">Details</a>' + (o.status === 'delivered' ? ' <button type="button" class="btn sm rev-open" data-rev="' + esc(o.number) + '">★ Rate &amp; review</button>' : '') +
+          (o.status === 'delivered' || o.status === 'refunded' ? ' <button type="button" class="btn sm line ret-open" data-ret="' + esc(o.number) + '">↩ Return / Refund</button>' : '') + '</div>' +
+          (o.status === 'delivered' ? '<div class="ao-rev" id="rev-' + esc(o.number) + '" hidden></div>' : '') +
+          (o.status === 'delivered' || o.status === 'refunded' ? '<div class="ao-rev" id="ret-' + esc(o.number) + '" hidden></div>' : '') + '</div>';
       }).join('') : '<p class="empty">No orders yet.</p>');
       $('#myOrders').onclick = function (e) {
+        var rb = e.target.closest('.ret-open');
+        if (rb) { var rbox = document.getElementById('ret-' + rb.dataset.ret); if (!rbox) return; rbox.hidden = !rbox.hidden;
+          if (!rbox.hidden) { rbox.innerHTML = '<p class="muted" style="margin:8px 0">Loading…</p>'; returnsUI(rb.dataset.ret, null, rbox); } return; }
         var b = e.target.closest('.rev-open'); if (!b) return;
         var box = document.getElementById('rev-' + b.dataset.rev); if (!box) return;
         box.hidden = !box.hidden;

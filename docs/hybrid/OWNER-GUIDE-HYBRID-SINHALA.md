@@ -132,3 +132,22 @@
 - Hæma product card ekakma yatin stars penawa (Flash Sale cards walath). Review nathi product ekaka stars alu paatin (0) penawa.
 - Product page eke yatin **Ratings & Reviews** kotasa hæmathissema penawa: average eka, 5★…1★ ganan, aluthma reviews, customer ge photo, "Verified purchase" saha oyage reply eka.
 - **My account → My orders** eke deliver una order ekaka **★ Rate & review** obanna. Ethanin stars saha comment eka danna puluwan, wena page ekakata yanna ona nê.
+
+## Return / Refund
+- **Customer:** order eka **Delivered** kalata passe **dawas 7k athulatha** (**Store Settings → return days**), **My account → My orders → ↩ Return / Refund** (guest kenek nam order eka karapu phone eke order page eken):
+  - return karana items saha ganana (gaththa ganata wada denna bæ),
+  - hethuwa: Arrived damaged / Does not work / Wrong item / Different from description / Parts missing ("change of mind" ganan ganne nê),
+  - wisthara (akuru 10+),
+  - **Money back** da **Replacement** da,
+  - Cash on Delivery hari bank transfer hari nam salli danna ona **bank account** eka. Card eken gewwa nam salli aye yanne card ekatama.
+  - Photos 3k wenakan (JPEG/PNG/WebP, 2 MB bagin). Photos private, staff ta witharai penne.
+- Customer ta thamange request eke status eka, oyage message eka saha refund eka order eke penawa. "Waiting" status eke thiyeddi request eka withdraw karanna puluwan.
+- **Admin → Returns** (main admin, ops manager, support, finance). Menu eke ganana kiyanne uththara nodunna requests:
+  1. **Approve**, nathnam **Reject** (customer ta hethuwa liyanna ona).
+  2. Item eka ganna → **Item received**. Aye wikunanna puluwan nam "Put the items back in stock" tick karanna.
+  3. **Replacement sent**, nathnam **Record refund**: mulinma salli aye gewanna (bank transfer / PayHere portal), ita passe amount eka saha reference eka danna.
+     - Me step eka karanna puluwan main admin ta saha finance ta witharai.
+     - Cash on Delivery order ekaka mulinma salli labuna kiyala record karala thiyenna ona.
+     - Order eke total ekata wada refund karanna bæ.
+     - Mulu order ekama refund kalama order eka "Refunded" wenawa.
+- Hæma step ekakma Audit Log eke saha order history eke record wenawa.

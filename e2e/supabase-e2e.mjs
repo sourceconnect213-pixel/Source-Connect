@@ -550,6 +550,66 @@ await ap.click(`#alist [data-cpw="${custId}"]`); await ap.fill('#cpwF [name=pw]'
 const relog = await (await fetch(`${SB}/auth/v1/token?grant_type=password`, { method: 'POST', headers: { apikey: ANON, 'content-type': 'application/json' }, body: JSON.stringify({ email: cemail, password: 'newgalle9' }) })).json();
 check('staff set a new password; the customer signs in with it', !!relog.access_token);
 
+// 10f. return / refund: a guest asks on the order page (items, reason, bank, photo); staff approve, receive, refund; the customer sees each step
+sql(`UPDATE app.inventory SET on_hand = 50, reserved = 0 FROM app.product_variants v WHERE v.id = inventory.variant_id AND v.sku IN ('BAGS-6', 'BAGS-7')`);
+sql(`UPDATE app.rate_limits SET hits = 0 WHERE key LIKE 'return%'`);
+const rtOrder = await (await fetch(`${SB}/rest/v1/rpc/place_order`, { method: 'POST', headers: { apikey: SERVICE, authorization: `Bearer ${SERVICE}`, 'content-type': 'application/json' },
+  body: JSON.stringify({ p_input: { items: [{ id: 'bags-6', size: '', qty: 2 }, { id: 'bags-7', size: '', qty: 1 }], customer: { name: 'Kasun Wijesinghe', phone: '0714445566', email: 'kasun@example.com', address: '3 Hill Street', city: 'Kandy', district: 'Kandy', note: '' }, payment: 'cod' }, p_customer_id: null, p_idempotency_key: null }) })).json();
+const rtC = await ctx(); const rp2 = await page(rtC, 'returns');
+await rp2.goto(withSb('')); await rp2.waitForSelector('.card', { timeout: 20000 });
+await rp2.evaluate(([n, t]) => SCG.rememberOrder(n, t), [rtOrder.orderNumber, rtOrder.trackingToken]);
+await rp2.evaluate((n) => { location.hash = 'order/' + n; }, rtOrder.orderNumber); await rp2.waitForSelector('#ordBox h2', { timeout: 15000 }); await rp2.waitForTimeout(1200);
+check('no return form before delivery', !(await rp2.$('#ordRet .ret-form')));
+sql(`UPDATE app.orders SET status = 'delivered' WHERE order_number = '${rtOrder.orderNumber}'`);
+sql(`INSERT INTO app.order_status_history (order_id, from_status, to_status, actor) SELECT id, 'shipped', 'delivered', 'staff:e2e' FROM app.orders WHERE order_number = '${rtOrder.orderNumber}'`);
+await rp2.reload(); await rp2.waitForSelector('#ordRet .ret-form', { timeout: 15000 });
+check('delivered: "Return / Refund" form with the items and the return window', /within 7 days of delivery/.test(await rp2.textContent('#ordRet')) && (await rp2.$$('#ordRet input[name=it]')).length === 2);
+check('Cash on Delivery: asks for the bank account for the refund', await rp2.isVisible('#ordRet input[name=accountNumber]'));
+await rp2.click('#ordRet input[value=replacement]');
+check('replacement chosen: no bank account needed', !(await rp2.isVisible('#ordRet input[name=accountNumber]')));
+await rp2.click('#ordRet input[value=refund]');
+await rp2.click('#ordRet .ret-form button.btn'); await rp2.waitForTimeout(500);
+check('sending without choosing an item: nothing is saved', sql(`SELECT count(*) FROM app.return_requests r JOIN app.orders o ON o.id = r.order_id WHERE o.order_number = '${rtOrder.orderNumber}'`) === '0');
+const bagLine = await rp2.evaluate(() => [...document.querySelectorAll('#ordRet .ret-item')].findIndex(l => l.querySelector('select')));
+await rp2.locator('#ordRet .ret-item').nth(bagLine).locator('input[name=it]').check(); await rp2.locator('#ordRet .ret-item').nth(bagLine).locator('select').selectOption('1');
+await rp2.selectOption('#ordRet select[name=reason]', 'damaged'); await rp2.fill('#ordRet textarea[name=details]', 'The strap was torn when it arrived.');
+await rp2.fill('#ordRet input[name=bank]', 'Sampath Bank'); await rp2.fill('#ordRet input[name=accountName]', 'Kasun Wijesinghe'); await rp2.fill('#ordRet input[name=accountNumber]', '1002003004');
+await rp2.setInputFiles('#ordRet input[name=photos]', [{ name: 'a.jpg', mimeType: 'image/jpeg', buffer: Buffer.alloc(10) }, { name: 'b.jpg', mimeType: 'image/jpeg', buffer: Buffer.alloc(10) }, { name: 'c.jpg', mimeType: 'image/jpeg', buffer: Buffer.alloc(10) }, { name: 'd.jpg', mimeType: 'image/jpeg', buffer: Buffer.alloc(10) }]);
+check('more than 3 photos refused at once', /up to 3 photos/.test(await rp2.textContent('#ordRet .ret-perr')));
+await rp2.setInputFiles('#ordRet input[name=photos]', { name: 'torn.png', mimeType: 'image/png', buffer: avatarPng });
+check('the photo is previewed', (await rp2.$$('#ordRet .ret-thumbs img')).length === 1);
+await rp2.screenshot({ path: OUT + '/sb-return-form.jpg', type: 'jpeg', quality: 70, fullPage: true });
+await rp2.click('#ordRet .ret-form button.btn');
+await rp2.waitForSelector('#ordRet .ret-req', { timeout: 20000 });
+const rtRow = sql(`SELECT r.status || '|' || r.reason || '|' || r.wants || '|' || cardinality(r.photos) || '|' || (r.bank ->> 'accountNumber') || '|' || (SELECT sum(quantity) FROM app.return_items i WHERE i.request_id = r.id) FROM app.return_requests r JOIN app.orders o ON o.id = r.order_id WHERE o.order_number = '${rtOrder.orderNumber}'`);
+check('request saved: 1 bag, damaged, refund, 1 photo, bank account', rtRow === 'requested|damaged|refund|1|1002003004|1', rtRow);
+check('the customer sees "Waiting for the shop" and can still ask about the other items', /Waiting for the shop/.test(await rp2.textContent('#ordRet')) && !!(await rp2.$('#ordRet .ret-form')));
+await rp2.setViewportSize({ width: 390, height: 844 }); await rp2.waitForTimeout(300);
+check('return form on a phone: no sideways scrolling', (await rp2.evaluate(() => document.documentElement.scrollWidth - innerWidth)) <= 1);
+await rp2.setViewportSize({ width: 1366, height: 860 });
+// staff: Returns page
+await ap.evaluate(() => { location.hash = 'dashboard'; }); await ap.waitForTimeout(800);
+check('Returns menu shows how many requests are waiting', (await ap.textContent('#rtPill')).trim() === sql(`SELECT count(*) FROM app.return_requests WHERE status = 'requested'`));
+await ap.evaluate(() => { location.hash = 'returns'; }); await ap.waitForSelector('.rt-card', { timeout: 15000 });
+check('admin sees customer, items, reason, photo and bank account', /Kasun Wijesinghe[\s\S]*0714445566/.test(await ap.textContent('.rt-card')) && /Arrived damaged[\s\S]*strap was torn/.test(await ap.textContent('.rt-card')) && /1002003004/.test(await ap.textContent('.rt-card')) && !!(await ap.$('.rt-card [data-ph]')));
+const photoUrl = await ap.evaluate(async () => (await SCG.api('POST', '/admin/returns/photo', { path: document.querySelector('.rt-card [data-ph]').dataset.ph })).url);
+check('the photo opens for staff through a short private link', (await fetch(photoUrl)).status === 200 && /\/object\/sign\/return-photos\//.test(photoUrl));
+await ap.screenshot({ path: OUT + '/sb-admin-returns.jpg', type: 'jpeg', quality: 70 });
+await ap.fill('.rt-card .rt-note textarea', 'Approved. Our courier will collect the bag on Monday.'); await ap.click('.rt-card [data-act=approve]'); await ap.waitForTimeout(1500);
+const s0 = Number(sql(`SELECT on_hand FROM app.inventory i JOIN app.product_variants v ON v.id = i.variant_id WHERE v.sku = 'BAGS-6'`));
+await ap.waitForSelector('.rt-card [data-act=receive]', { timeout: 15000 }); await ap.click('.rt-card [data-act=receive]'); await ap.waitForTimeout(1500);
+check('received with "back in stock": the bag is back in stock', Number(sql(`SELECT on_hand FROM app.inventory i JOIN app.product_variants v ON v.id = i.variant_id WHERE v.sku = 'BAGS-6'`)) === s0 + 1);
+sql(`UPDATE app.orders SET payment_status = 'cod_collected' WHERE order_number = '${rtOrder.orderNumber}'`);
+await ap.evaluate(() => { location.hash = 'dashboard'; }); await ap.waitForTimeout(600); await ap.evaluate(() => { location.hash = 'returns'; }); await ap.waitForSelector('.rt-card .rt-amount', { timeout: 15000 });
+check('refund amount suggested from the returned item', Number(await ap.inputValue('.rt-card .rt-amount')) === Number(sql(`SELECT unit_price_cents / 100 FROM app.order_items oi JOIN app.orders o ON o.id = oi.order_id WHERE o.order_number = '${rtOrder.orderNumber}' AND oi.product_slug = 'bags-6'`)));
+await ap.fill('.rt-card .rt-ref', 'SAMPATH-778899'); ap.once('dialog', d => d.accept()); await ap.click('.rt-card [data-act=refund]'); await ap.waitForTimeout(1800);
+check('refund recorded; the order is partly refunded', sql(`SELECT r.status || '|' || o.payment_status FROM app.return_requests r JOIN app.orders o ON o.id = r.order_id WHERE o.order_number = '${rtOrder.orderNumber}'`) === 'refunded|partially_refunded');
+await rp2.reload(); await rp2.waitForSelector('#ordRet .ret-req', { timeout: 15000 });
+const rtTxt = await rp2.textContent('#ordRet');
+check('the customer sees "Refunded", the amount and the shop message', /Refunded Rs\.\s?[0-9,]+/.test(rtTxt) && /Message from Source Connect[\s\S]*courier will collect/.test(rtTxt), rtTxt.slice(0, 200));
+await rp2.locator('#ordRet').screenshot({ path: OUT + '/sb-return-status.jpg', type: 'jpeg', quality: 70 });
+await rtC.close();
+
 // 11. usage page (main admin)
 await ap.evaluate(() => { location.hash = 'usage'; }); await ap.waitForSelector('.use-row', { timeout: 15000 });
 const use = await ap.$$eval('.use-row .use-head', l => l.map(x => x.textContent.replace(/\s+/g, ' ').trim()));

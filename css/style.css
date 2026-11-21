@@ -793,3 +793,26 @@ img.ia.ia-in { animation: iaIn .75s cubic-bezier(.22, 1, .36, 1) backwards; }
 .rev-jump { display: contents; color: inherit; }
 .ao-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .ao-rev { border-top: 1px dashed #e0e3ea; margin-top: 10px; }
+
+/* return / refund requests */
+.ret-req { border: 1px solid #e3e6ee; border-radius: 10px; padding: 12px 14px; margin: 8px 0; }
+.ret-req-top { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.ret-st { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: #eef2ff; color: var(--navy); }
+.ret-st.rejected, .ret-st.cancelled { background: #f3f4f6; color: #6b7280; }
+.ret-st.refunded, .ret-st.replaced { background: #dcfce7; color: #15803d; }
+.ret-items { margin: 6px 0 0; padding-left: 18px; font-size: 14px; }
+.ret-ok { margin: 6px 0 0; color: #15803d; font-weight: 700; }
+.ret-form { margin-top: 6px; }
+.ret-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px dashed #e3e6ee; }
+.ret-item span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.ret-item select { width: auto; }
+.ret-bank-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 6px; }
+@media (max-width: 560px) { .ret-bank-grid { grid-template-columns: 1fr; } }
+.ret-thumbs { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.ret-thumbs img { width: 64px; height: 64px; object-fit: cover; border-radius: 8px; }
+.ret-form .btn { justify-self: start; }
+.ret-form label.ret-item { display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text); }
+.ret-form label.ret-item input[type=checkbox], .ret-form label.chk input[type=radio] { width: 18px; height: 18px; padding: 0; flex: none; margin: 0; accent-color: var(--navy); }
+.ret-form label.ret-item select { width: auto; flex: none; padding: 6px 10px; }
+.ret-form label.chk { display: inline-flex; align-items: center; gap: 8px; margin: 8px 18px 0 0; font-size: 14px; color: var(--text); }
+.ret-form input[type=file] { padding: 8px; }

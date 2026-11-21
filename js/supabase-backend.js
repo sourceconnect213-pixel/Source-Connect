@@ -188,6 +188,11 @@
     // ---- product reviews (buyers of a delivered order; the database checks who may write) ----
     if ((x = m(/^\/reviews\/([a-z0-9-]+)$/, path))) return rpc('product_reviews', { p_product: x[1], p_stars: qs.stars ? Number(qs.stars) : null, p_limit: 10, p_offset: Number(qs.offset || 0) })
       .then(function (d) { if (d && d.reviews) d.reviews.forEach(withAvatar); return d; });
+    // ---- return / refund requests (buyers of a delivered order; the database checks who may ask and what) ----
+    if (path === '/orders/returns') return rpc('order_returns', { p_number: body.number, p_token: body.token || null }, 'customer');
+    if (path === '/orders/returns/photo') return edge('return-photo', { number: body.number, token: body.token || null, image: body.image }, 'customer');
+    if (path === '/orders/returns/create') return rpc('return_request_create', { p_number: body.number, p_token: body.token || null, p_data: body.data }, 'customer');
+    if (path === '/orders/returns/cancel') return rpc('return_request_cancel', { p_number: body.number, p_token: body.token || null, p_id: Number(body.id) }, 'customer');
     if (path === '/orders/reviews') return rpc('order_reviews', { p_number: body.number, p_token: body.token || null }, 'customer');
     if (path === '/orders/reviews/save') return rpc('submit_review', { p_number: body.number, p_token: body.token || null, p_product: body.product, p_rating: Number(body.rating), p_comment: body.comment || '' }, 'customer');
     if (path === '/account/orders') return rpc('my_orders', {}, 'customer');
@@ -269,6 +274,13 @@
     if ((x = m(/^\/admin\/coupons\/([^/]+)$/, path))) return rpc('admin_set_coupon_active', { p_id: x[1], p_active: !!body.active }, 'staff');
     // extra access: a staff member asks, the main admin approves (or gives it directly)
     if (path === '/admin/usage') return rpc('admin_usage', {}, 'staff');
+    if (path.split('?')[0] === '/admin/returns') return rpc('admin_returns', { p_filter: qs.filter || 'open', p_limit: 50, p_offset: Number(qs.offset || 0) }, 'staff');
+    if ((x = m(/^\/admin\/returns\/([0-9]+)$/, path))) return rpc('admin_return_update', { p_id: Number(x[1]), p_action: body.action, p_note: body.note || '', p_data: body.data || {} }, 'staff');
+    if (path === '/admin/returns/photo') return token('staff').then(function (t) {   // a short-lived link to a private return photo
+      if (!t) throw err(401, 'unauthorized', 'Please sign in.');
+      return fetch(URL_ + '/storage/v1/object/sign/return-photos/' + String(body.path || '').split('/').map(encodeURIComponent).join('/'), { method: 'POST', headers: { apikey: ANON, authorization: 'Bearer ' + t, 'content-type': 'application/json' }, body: JSON.stringify({ expiresIn: 600 }) })
+        .then(function (res) { return readJson(res).then(function (d) { if (!res.ok || !d || !(d.signedURL || d.signedUrl)) throw err(res.status, 'photo', 'The photo could not be opened.'); return { url: URL_ + '/storage/v1' + (d.signedURL || d.signedUrl) }; }); });
+    });
     if (path.split('?')[0] === '/admin/reviews') return rpc('admin_reviews', { p_filter: qs.filter || 'all', p_limit: 50, p_offset: Number(qs.offset || 0) }, 'staff');
     if ((x = m(/^\/admin\/reviews\/([0-9]+)$/, path))) return rpc('admin_review_update', { p_id: Number(x[1]), p_status: body.status || null, p_reply: body.reply === undefined ? null : String(body.reply) }, 'staff');
     if (path === '/admin/access/mine') return rpc('admin_my_access', {}, 'staff');

@@ -425,6 +425,9 @@ verify_jwt = false
 verify_jwt = false
 [functions.track-order]
 verify_jwt = false
+# Return photos: guests prove the order with its secret tracking token, checked by the database inside the function.
+[functions.return-photo]
+verify_jwt = false
 # Staff only: a valid Supabase Auth token is required; permissions are checked in the database.
 [functions.admin-staff]
 verify_jwt = true
