@@ -40,9 +40,16 @@ sql(`DELETE FROM app.product_costs WHERE product_id = (SELECT id FROM app.produc
 sql(`UPDATE app.security_settings SET require_staff_mfa = true`);
 sql(`UPDATE app.ops_settings SET payhere_configured = true`);
 
-const b = await chromium.launch();
+// pages are re-served by the test (to add the CSP header); Chrome then treats them as public pages and would refuse calls to
+// the LOCAL Supabase on 127.0.0.1 (private network rule). Test-only: the real site and Supabase are both public.
+const b = await chromium.launch({ args: ['--disable-features=BlockInsecurePrivateNetworkRequests,PrivateNetworkAccessSendPreflights,PrivateNetworkAccessRespectPreflightResults,LocalNetworkAccessChecks'] });
+// the production Content-Security-Policy (deploy/_headers), pointed at the local Supabase, on every page of the test
+const CSP = fs.readFileSync(new URL('../deploy/_headers', import.meta.url), 'utf8').match(/Content-Security-Policy: (.*)/)[1]
+  .replace('https://nuqmaiybqmuvtfnjdzvn.supabase.co', SB).replace("img-src 'self'", "img-src 'self' " + SB);
 async function ctx(opts = {}) {
   const c = await b.newContext({ viewport: { width: 1366, height: 860 }, ...opts });
+  await c.route(u => u.href.startsWith(SITE) && /(\/|\.html)$/.test(u.pathname), async r => { const res = await r.fetch(); await r.fulfill({ response: res, headers: { ...res.headers(), 'content-security-policy': CSP } }); });
+  await c.addInitScript(() => document.addEventListener('securitypolicyviolation', e => console.error('CSP blocked: ' + e.violatedDirective + ' ' + e.blockedURI)));
   await c.addInitScript(() => { try { sessionStorage.setItem('scg_intro_seen', '1'); localStorage.setItem('scg_intro_seen', '1'); } catch (e) {} });
   await c.route('https://sandbox.payhere.lk/**', async r => { c._payhere = r.request().postData(); await r.fulfill({ status: 200, contentType: 'text/html', body: '<h1>PayHere sandbox (stub)</h1>' }); });
   return c;
@@ -609,6 +616,41 @@ const rtTxt = await rp2.textContent('#ordRet');
 check('the customer sees "Refunded", the amount and the shop message', /Refunded Rs\.\s?[0-9,]+/.test(rtTxt) && /Message from Source Connect[\s\S]*courier will collect/.test(rtTxt), rtTxt.slice(0, 200));
 await rp2.locator('#ordRet').screenshot({ path: OUT + '/sb-return-status.jpg', type: 'jpeg', quality: 70 });
 await rtC.close();
+
+// 10g. attack test (XSS): attack code typed into every field a customer controls must show as plain text, never run
+const XSS = '<img src=x onerror="window.__xss=1"><script>window.__xss=2</script>', XS = '<img src=x onerror=window.__xss=1>';   // XS fits short fields
+sql(`UPDATE app.inventory SET on_hand = 50, reserved = 0 FROM app.product_variants v WHERE v.id = inventory.variant_id AND v.sku = 'BAGS-7'`);
+sql(`UPDATE app.rate_limits SET hits = 0 WHERE key LIKE 'return%' OR key LIKE 'review%'`);
+const xo = await (await fetch(`${SB}/rest/v1/rpc/place_order`, { method: 'POST', headers: { apikey: SERVICE, authorization: `Bearer ${SERVICE}`, 'content-type': 'application/json' },
+  body: JSON.stringify({ p_input: { items: [{ id: 'bags-7', size: '', qty: 1 }], customer: { name: 'Evil ' + XSS, phone: '0719990000', email: 'evil@example.com', address: '1 ' + XSS, city: XS, district: 'Colombo', note: XSS }, payment: 'cod' }, p_customer_id: null, p_idempotency_key: null }) })).json();
+check('attack test order placed (the text is accepted, it is only text)', /^SC-/.test(xo.orderNumber || ''), JSON.stringify(xo).slice(0, 160));
+sql(`UPDATE app.orders SET status = 'delivered' WHERE order_number = '${xo.orderNumber}'`);
+sql(`INSERT INTO app.order_status_history (order_id, from_status, to_status, actor) SELECT id, 'shipped', 'delivered', 'staff:e2e' FROM app.orders WHERE order_number = '${xo.orderNumber}'`);
+const anonRpc = async (fn, args) => (await fetch(`${SB}/rest/v1/rpc/${fn}`, { method: 'POST', headers: { apikey: ANON, 'content-type': 'application/json' }, body: JSON.stringify(args) })).json();
+await anonRpc('submit_review', { p_number: xo.orderNumber, p_token: xo.trackingToken, p_product: 'bags-7', p_rating: 1, p_comment: 'Bad ' + XSS });
+const xItem = sql(`SELECT oi.id FROM app.order_items oi JOIN app.orders o ON o.id = oi.order_id WHERE o.order_number = '${xo.orderNumber}'`);
+await anonRpc('return_request_create', { p_number: xo.orderNumber, p_token: xo.trackingToken, p_data: { items: [{ id: xItem, qty: 1 }], reason: 'damaged', details: 'Broken ' + XSS, wants: 'refund',
+  bank: { bank: XS, branch: XS, accountName: XS, accountNumber: '12345678' } } });
+await fetch(`${SB}/auth/v1/signup`, { method: 'POST', headers: { apikey: ANON, 'content-type': 'application/json' },
+  body: JSON.stringify({ email: `xss-${Date.now()}@example.com`, password: 'attacker1', data: { name: 'Mallory ' + XSS, phone: XS.slice(0, 20), phone2: XS.slice(0, 20), address: { line1: 'L ' + XSS, city: XS, district: 'Colombo' } } }) });
+check('the attack text reached the database (so the pages really get tested with it)', sql(`SELECT count(*) FROM app.return_requests WHERE details LIKE '%onerror%'`) === '1' && sql(`SELECT count(*) FROM app.product_reviews WHERE comment LIKE '%onerror%'`) === '1');
+const xssSeen = (p) => p.evaluate(() => ({ ran: window.__xss || 0, tags: document.querySelectorAll('img[src="x"], [onerror], #app script, #view script, .modal script').length }));
+const xssPages = [];
+for (const h of ['orders', 'orders/' + xo.orderNumber, 'customers', 'reviews', 'returns', 'dashboard', 'audit']) {
+  await ap.evaluate((x) => { document.getElementById('modal')?.classList.remove('open'); location.hash = x; }, h); await ap.waitForTimeout(1800);
+  xssPages.push('admin #' + h + ' ' + JSON.stringify(await xssSeen(ap)));
+}
+const xc = await ctx(); const xp = await page(xc, 'xss');
+await xp.goto(withSb('')); await xp.waitForSelector('.card', { timeout: 20000 });
+await xp.evaluate(([n, t]) => SCG.rememberOrder(n, t), [xo.orderNumber, xo.trackingToken]);
+for (const h of ['p/bags-7', 'order/' + xo.orderNumber]) {
+  await xp.evaluate((x) => { location.hash = x; }, h); await xp.waitForTimeout(2500);
+  xssPages.push('shop #' + h + ' ' + JSON.stringify(await xssSeen(xp)));
+}
+check('attack text in the admin pages: shown as text, never run', xssPages.filter(l => l.startsWith('admin')).every(l => /"ran":0,"tags":0/.test(l)), xssPages.filter(l => l.startsWith('admin')).join(' | '));
+check('attack text on the website (reviews, order, return): shown as text, never run', xssPages.filter(l => l.startsWith('shop')).every(l => /"ran":0,"tags":0/.test(l)), xssPages.filter(l => l.startsWith('shop')).join(' | '));
+check('the review shows the attack code as plain text', (await xp.evaluate(async () => { location.hash = 'p/bags-7'; await new Promise(r => setTimeout(r, 2500)); return document.getElementById('revBox')?.textContent || ''; })).includes('<img src=x onerror='));
+await xc.close();
 
 // 11. usage page (main admin)
 await ap.evaluate(() => { location.hash = 'usage'; }); await ap.waitForSelector('.use-row', { timeout: 15000 });

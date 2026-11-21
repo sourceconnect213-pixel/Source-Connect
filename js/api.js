@@ -222,7 +222,8 @@
       // the welcome intro never starts in this case: take its dark cover away, or the visitor would stare at a black screen
       document.documentElement.classList.remove('intro-on', 'intro-wait');
       if (app) app.innerHTML = '<div class="container" style="padding:60px 16px;text-align:center"><h2>The shop is taking a short break</h2><p class="muted">' +
-        SCG.escapeHTML(err && err.message || 'Please try again in a moment.') + '</p><p><button class="btn" onclick="location.reload()">Try again</button></p></div>';
+        SCG.escapeHTML(err && err.message || 'Please try again in a moment.') + '</p><p><button class="btn" data-reload>Try again</button></p></div>';
+      var again = app && app.querySelector('[data-reload]'); if (again) again.onclick = function () { location.reload(); };
     });
   };
 })(window);

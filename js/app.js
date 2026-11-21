@@ -388,7 +388,7 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
     moreJFY();
     var more = $('#jfyMore');
     if ('IntersectionObserver' in window) { jfy.io = new IntersectionObserver(function (en) { if (en[0].isIntersecting) moreJFY(); }, { rootMargin: '400px' }); jfy.io.observe(more); }
-    else more.innerHTML = '<button class="btn line" onclick="return false">Load more</button>';
+    else { more.innerHTML = '<button class="btn line">Load more</button>'; more.firstChild.onclick = function () { moreJFY(); }; }   // very old browsers
   }
   function moreJFY() {
     var grid = $('#jfy'); if (!grid) return;
@@ -668,7 +668,7 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
       '<div class="sum-row"><span>Delivery fee</span><span>' + (t.ship ? money(t.ship) : 'FREE') + '</span></div>' +
       (t.need && t.items ? '<div class="free-note need">Add ' + money(t.need) + ' more for FREE delivery</div>' : t.items ? '<div class="free-note">🎉 You get FREE delivery</div>' : '') +
       '<div class="sum-row total"><span>Total</span><span>' + money(t.total) + '</span></div>' +
-      '<a class="btn full lg" href="#checkout" style="margin-top:12px"' + (t.items ? '' : ' aria-disabled="true" onclick="return false"') + '>Proceed to Checkout (' + t.items + ')</a></aside></div></div>';
+      '<a class="btn full lg"' + (t.items ? ' href="#checkout"' : ' aria-disabled="true"') + ' style="margin-top:12px">Proceed to Checkout (' + t.items + ')</a></aside></div></div>';
     app.onchange = function (e) {
       var cart = SCG.getCart();
       if (e.target.id === 'selAll') cart.forEach(function (l) { l.sel = e.target.checked; });
