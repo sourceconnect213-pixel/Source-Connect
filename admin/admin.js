@@ -79,7 +79,7 @@
   function orders() { return SCG.getOrders(); }
   function updatePill() { var n = orders().filter(function (o) { return o.status === 'Pending'; }).length; $('#orderPill').textContent = n || ''; }
   function statusTag(s) { return '<span class="tag ' + ({ Pending: 'warn', Delivered: 'ok', Cancelled: 'red' }[s] || '') + '">' + esc(s) + '</span>'; }
-  function sw(name, on, label) { return '<label class="switch"><input type="checkbox" name="' + name + '"' + (on ? ' checked' : '') + '><i></i>' + (label || '') + '</label>'; }
+  function sw(name, on, label, aria) { return '<label class="switch"><input type="checkbox" name="' + name + '"' + (on ? ' checked' : '') + (!label && aria ? ' aria-label="' + esc(aria) + '"' : '') + '><i></i>' + (label || '') + '</label>'; }
   function originOptions(sel) {
     return SCG.origins().map(function (o) { return '<option value="' + o.id + '"' + (o.id === sel ? ' selected' : '') + '>' + esc(o.name) + (o.on ? '' : ' (off)') + '</option>'; }).join('') +
       '<option value="local"' + (!sel || sel === 'local' ? ' selected' : '') + '>Colombo stock</option>';
@@ -87,16 +87,18 @@
   function originName(id) { var o = SCG.originById(id); return o ? o.name : 'Colombo'; }
   function fmtBytes(b) { return b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.round(b / 1024) + ' KB'; }
   function storageMeter() {
+    // server mode: photos go to the shop's own storage when the product is saved; the browser's storage is not involved
+    if (SCG.API) return '<div class="meter"><small class="muted">Photos are saved on the shop server when you press Save. Large pictures are made smaller automatically.</small></div>';
     var used = SCG.storageUsed(), cap = 5 * 1048576, pct = Math.min(100, used / cap * 100);
     return '<div class="meter"><div><b>' + fmtBytes(used) + '</b> of about 5 MB browser storage used</div><div class="bar-track"><i style="width:' + pct + '%;' + (pct > 80 ? 'background:var(--red)' : '') + '"></i></div>' +
       (pct > 80 ? '<small style="color:var(--red)">Storage is nearly full. Use image links instead of uploads, or remove unused photos.</small>' : '<small class="muted">Uploaded photos are compressed. Image links (URLs) use almost no space.</small>') + '</div>';
   }
   function waNumber(phone) { var d = String(phone || '').replace(/\D/g, ''); if (d.indexOf('0') === 0) d = '94' + d.slice(1); return d; }
-  function bindUploader(root, current, onChange) {
+  function bindUploader(root, current, onChange, max, quality) {
     var file = $('input[type=file]', root), prev = $('.preview', root);
     file.onchange = function () {
       if (!file.files[0]) return;
-      SCG.imageToDataURL(file.files[0], 900).then(function (url) { prev.innerHTML = '<img src="' + SCG.imgSrc(url) + '" alt="">'; onChange(url); })
+      SCG.imageToDataURL(file.files[0], max || 900, quality).then(function (url) { prev.innerHTML = '<img src="' + SCG.imgSrc(url) + '" alt="">'; onChange(url); })
         .catch(function () { toast('Could not read that image'); });
     };
     var rm = $('[data-rm-img]', root);
@@ -172,6 +174,13 @@
     updatePill();
   }
   window.addEventListener('hashchange', route);
+  // Wide tables scroll sideways inside their own box: make that box reachable from the keyboard and name it for screen readers.
+  (function () {
+    var pending = false;
+    function mark() { pending = false; $$('.table-wrap:not([tabindex])').forEach(function (el) { el.tabIndex = 0; el.setAttribute('role', 'region'); el.setAttribute('aria-label', 'Table. Scroll sideways to see every column.'); }); }
+    new MutationObserver(function () { if (!pending) { pending = true; requestAnimationFrame(mark); } }).observe(document.body, { childList: true, subtree: true });
+    mark();
+  })();
 
   /* =========================================================
      LIVE PREVIEW PANEL + CLICK-TO-EDIT
@@ -218,14 +227,16 @@
     var px = w ? +w : Math.round((innerWidth - 250) * (full ? .72 : .5));
     px = Math.max(360, Math.min(px, innerWidth - 250 - (full ? 240 : 380)));
     document.documentElement.style.setProperty('--pvw', px + 'px');
+    pvAria(px);
     pvScale();
   }
+  function pvAria(px) { var sp = $('#pvSplit'); if (sp) sp.setAttribute('aria-valuenow', String(Math.max(0, Math.min(100, Math.round(px / Math.max(1, innerWidth) * 100))))); }
   (function () {
     var sp = $('#pvSplit'), drag = false;
     function move(x) {
       var full = $('#shell').classList.contains('pv-full');
       var px = Math.max(360, Math.min(innerWidth - x, innerWidth - 250 - (full ? 240 : 380)));
-      document.documentElement.style.setProperty('--pvw', px + 'px'); pvScale();
+      document.documentElement.style.setProperty('--pvw', px + 'px'); pvAria(px); pvScale();
       try { localStorage.setItem(pvWidthKey(), String(px)); } catch (e) {}
     }
     sp.addEventListener('pointerdown', function (e) { drag = true; sp.setPointerCapture(e.pointerId); document.body.classList.add('pv-dragging'); e.preventDefault(); });
@@ -253,6 +264,7 @@
     var visible = !!(has && (shell.classList.contains('pv-full') || (pvNarrow() ? pv.sheet : !pv.hidden)));
     shell.classList.toggle('has-pv', visible);
     $('#pv').hidden = !visible; $('#pvFab').hidden = !(has && !visible);
+    document.body.classList.toggle('has-pv-fab', has && !visible);
     document.body.classList.toggle('pv-on', visible); document.body.classList.toggle('pv-wide', visible && shell.classList.contains('pv-full'));
     if (visible) { pvGo(page); pvApplyWidth(); requestAnimationFrame(pvScale); }
   }
@@ -440,7 +452,7 @@
           '<td><input class="inline" type="number" min="0" data-f="price" value="' + p.price + '" aria-label="Price">' + (off ? '<br><small class="muted"><s>' + money(p.comparePrice) + '</s> -' + off + '%</small>' : '') + '</td>' +
           '<td><input class="inline" type="number" min="0" data-f="stock" value="' + p.stock + '" aria-label="Stock" style="width:64px' + (p.stock <= 5 ? ';border-color:#f59e0b' : '') + '"></td>' +
           '<td><select data-f="origin" aria-label="Ships from" style="width:auto;padding:6px">' + originOptions(p.origin) + '</select></td>' +
-          '<td>' + sw('flash', p.flash) + '</td>' +
+          '<td>' + sw('flash', p.flash, '', 'In Flash Sale: ' + p.name) + '</td>' +
           '<td><div class="actions"><a class="btn sm" target="_blank" rel="noopener" href="' + SITE + '#p/' + p.id + '" title="View on site">↗</a><button class="btn sm" data-edit>Edit</button><button class="btn sm" data-dup>Copy</button><button class="btn sm danger" data-del>Delete</button></div></td></tr>';
       }).join('') || '<tr><td colspan="8" class="muted" style="text-align:center;padding:40px">No products found.</td></tr>';
       bulkUI();
@@ -555,7 +567,7 @@
       var files = Array.prototype.slice.call(e.target.files, 0, Math.max(0, 8 - d.images.length));
       if (!files.length) { toast('Up to 8 photos per product'); return; }
       toast('Processing ' + files.length + ' photo(s)…');
-      Promise.all(files.map(function (fl) { return SCG.imageToDataURL(fl, 800).catch(function () { return null; }); })).then(function (urls) {
+      Promise.all(files.map(function (fl) { return SCG.imageToDataURL(fl, SCG.API ? 1600 : 800, SCG.API ? 0.85 : undefined).catch(function () { return null; }); })).then(function (urls) {
         var ok = urls.filter(Boolean); d.images = d.images.concat(ok); drawGal();
         toast(ok.length + ' photo(s) added' + (ok.length < urls.length ? ', some could not be read' : ''));
         e.target.value = '';
@@ -587,6 +599,7 @@
         description: E.description.value.trim(), featured: E.featured.checked, flash: E.flash.checked
       });
       out.images = d.images.slice(0, 8); out.image = out.images[0] || '';
+      if (isNew && f._newStock) out.stockBySize = f._newStock;   // stock for each size of a new product (server mode)
       if (isNew) { out.id = SCG.uid(out.category); out.createdAt = Date.now(); db.products.unshift(out); }
       else db.products[db.products.indexOf(p)] = out;
       if (!commit(isNew ? 'Product added' : 'Product updated')) return;
@@ -747,7 +760,7 @@
         '<label class="full">Name<input name="name" required value="' + esc(c.name) + '"></label>' +
         '<label class="full">Description<textarea name="description" rows="2">' + esc(c.description || '') + '</textarea></label>' +
         '<label>Colour<input type="color" name="accent" value="' + esc(c.accent || '#0b2a6f') + '"></label>' +
-        '<div class="uploader" id="cCover"><div class="preview" style="width:120px;height:80px">' + (c.image ? '<img src="' + SCG.imgSrc(c.image) + '" alt="">' : '<span class="hint">No cover</span>') + '</div><div class="btns"><input type="file" accept="image/*" aria-label="Upload a picture"><button type="button" class="btn sm danger" data-rm-img>Remove cover</button></div></div>' +
+        '<div class="uploader" id="cCover"><div class="preview" style="width:120px;height:80px">' + (c.image ? '<img src="' + SCG.imgSrc(c.image) + '" alt="">' : '<span class="hint">No picture</span>') + '</div><div class="btns"><small class="muted">Picture shown whole beside the title</small><input type="file" accept="image/*" aria-label="Upload a picture"><button type="button" class="btn sm danger" data-rm-img>Remove picture</button></div></div>' +
         '<div class="full" style="display:flex;gap:18px;flex-wrap:wrap">' + sw('nav', inNav(), 'Show in header menu') + sw('home', !!c.homeRow, 'Show as a row on the homepage') + '</div>' +
         '<div class="form-foot"><button class="btn primary">Save details</button></div></div></form>' +
       '<div class="panel"><h3>Fill quickly <small>add every product that matches</small></h3><div class="form" style="grid-template-columns:1fr">' +
@@ -766,7 +779,7 @@
 
     // ---- details form
     var cover = c.image || '';
-    bindUploader($('#cCover'), function () { return '<span class="hint">No cover</span>'; }, function (u) { cover = u; });
+    bindUploader($('#cCover'), function () { return '<span class="hint">No picture</span>'; }, function (u) { cover = u; });
     $('#cInfo').onsubmit = function (e) {
       e.preventDefault(); var E = e.target.elements;
       c.name = E.name.value.trim() || c.name; c.description = E.description.value.trim(); c.accent = E.accent.value; c.image = cover; c.homeRow = E.home.checked;
@@ -986,7 +999,7 @@
       '<div class="panel"><h3>Countries you import from <small>switch a country off to hide it on the site and the globe</small></h3>' +
       '<div class="table-wrap" style="border:0"><table><thead><tr><th>Show</th><th>Code</th><th>Country</th><th>Label on products</th><th>Delivery (days)</th><th>Products</th><th>Globe cities</th></tr></thead><tbody id="otb">' +
       list.map(function (o, i) {
-        return '<tr data-i="' + i + '"><td>' + sw('on', o.on) + '</td><td><input data-k="code" aria-label="Country code" value="' + esc(o.code) + '" style="width:60px" maxlength="3"></td>' +
+        return '<tr data-i="' + i + '"><td>' + sw('on', o.on, '', 'Show ' + (o.name || 'this country') + ' on the website') + '</td><td><input data-k="code" aria-label="Country code" value="' + esc(o.code) + '" style="width:60px" maxlength="3"></td>' +
           '<td><input data-k="name" aria-label="Country name" value="' + esc(o.name) + '" style="min-width:130px"></td><td><input data-k="label" aria-label="Label on products" value="' + esc(o.label) + '" style="min-width:140px"></td>' +
           '<td><input data-k="days" aria-label="Delivery days" value="' + esc(o.days) + '" style="width:90px"></td><td><a class="tag" href="#products" data-filter="' + o.id + '">' + count(o.id) + '</a></td>' +
           '<td><div class="checks">' + cities.filter(function (c) { return c.country === o.id; }).map(function (c) {
@@ -1022,9 +1035,12 @@
      ========================================================= */
   function banners(v) {
     setActions('<button class="btn primary" id="addHero">+ Add Banner</button>' + preview('', 'Preview homepage'));
-    v.innerHTML = '<p class="muted" style="margin-top:0">Banners 1–2 sit beside the globe. Banners 3 and up show as wide banners below the categories (that section can be switched on or off in Homepage &amp; Globe). Use ↑ to reorder.</p><div class="cards">' + db.hero.map(function (h, i) {
-      return '<div class="item-card"><div class="cover" style="background:linear-gradient(120deg,' + h.color + ',' + SCG.shade(h.color, -70) + ')">' + (h.image ? '<img src="' + SCG.imgSrc(h.image) + '" alt="">' : SCG.productSVG(h.shape, '#ffffff', 'solid', h.color)) + '</div>' +
-        '<div class="body"><small class="muted">' + (i < 2 ? 'BESIDE GLOBE' : 'WIDE BANNER') + ' · ' + esc(h.eyebrow) + '</small><h4>' + esc(h.title) + '</h4><p>' + esc(h.subtitle) + '</p><p><code class="muted">' + esc(h.link) + '</code></p></div>' +
+    var nCard = 0;
+    v.innerHTML = '<p class="muted" style="margin-top:0"><b>Poster</b> banners (a finished picture with its own words, like an 11:11 sale design) show whole, at their own shape, in a full-width slider under the globe. ' +
+      'Other banners: the first 2 sit beside the globe; the rest show as wide banners below the categories (that section can be switched on or off in Homepage &amp; Globe). Use ↑ to reorder.</p><div class="cards">' + db.hero.map(function (h, i) {
+      var poster = h.style === 'poster' && h.image, place = poster ? 'POSTER · FULL-WIDTH SLIDER' : (nCard++ < 2 ? 'BESIDE GLOBE' : 'WIDE BANNER');
+      return '<div class="item-card"><div class="cover" style="' + (poster ? 'background:#eef1f6' : 'background:linear-gradient(120deg,' + h.color + ',' + SCG.shade(h.color, -70) + ')') + '">' + (h.image ? '<img src="' + SCG.imgSrc(h.image) + '" alt=""' + (poster ? ' style="object-fit:contain"' : '') + '>' : SCG.productSVG(h.shape, '#ffffff', 'solid', h.color)) + '</div>' +
+        '<div class="body"><small class="muted">' + place + (poster ? '' : ' · ' + esc(h.eyebrow)) + '</small><h4>' + esc(h.title) + '</h4><p>' + esc(h.subtitle) + '</p><p><code class="muted">' + esc(h.link) + '</code></p></div>' +
         '<div class="foot"><button class="btn sm" data-up="' + i + '"' + (i === 0 ? ' disabled' : '') + '>↑</button><button class="btn sm" data-edit="' + i + '">Edit</button><button class="btn sm danger" data-del="' + i + '">Delete</button></div></div>';
     }).join('') + '</div>';
     $('#addHero').onclick = function () { bannerForm(-1); };
@@ -1039,24 +1055,46 @@
     return ['#shop', '#flash', '#china-direct', '#track', '#help', '#categories'].concat(db.categories.map(function (c) { return '#c/' + c.id; }), db.collections.map(function (c) { return '#col/' + c.id; }), SCG.origins().map(function (o) { return '#from/' + o.id; }));
   }
   function bannerForm(i) {
-    var h = i > -1 ? JSON.parse(JSON.stringify(db.hero[i])) : { id: SCG.uid('h'), eyebrow: 'New Season', title: 'Your headline', subtitle: '', cta: 'Shop Now', link: '#shop', color: '#0b2a6f', shape: 'tshirt', image: '' };
+    var h = i > -1 ? JSON.parse(JSON.stringify(db.hero[i])) : { id: SCG.uid('h'), eyebrow: 'New Season', title: 'Your headline', subtitle: '', cta: 'Shop Now', link: '#shop', color: '#0b2a6f', shape: 'tshirt', image: '', style: 'card' };
+    if (h.style !== 'poster') h.style = 'card';
+    var posterImg = h.style === 'poster' ? h.image : '', cardImg = h.style === 'poster' ? '' : h.image;
     function prev() { return h.image ? '<img src="' + SCG.imgSrc(h.image) + '" alt="">' : SCG.productSVG(h.shape, '#ffffff', 'solid', h.color); }
+    function posterPrev() { return posterImg ? '<img src="' + SCG.imgSrc(posterImg) + '" alt="" style="display:block;width:100%;height:auto">' : '<p class="muted" style="margin:0;padding:28px 12px;text-align:center">No picture yet</p>'; }
     openModal(i > -1 ? 'Edit Banner' : 'Add Banner',
-      '<form class="form" id="hform"><label>Small label<input name="eyebrow" value="' + esc(h.eyebrow) + '"></label>' +
-      '<label>Button text<input name="cta" value="' + esc(h.cta) + '"></label>' +
-      '<label class="full">Title<input name="title" required value="' + esc(h.title) + '"></label>' +
-      '<label class="full">Subtitle<input name="subtitle" value="' + esc(h.subtitle) + '"></label>' +
+      '<form class="form" id="hform">' +
+      '<label class="full">Banner type<select name="style"><option value="card"' + (h.style === 'card' ? ' selected' : '') + '>Text banner (the website writes the words over a colour or photo)</option>' +
+        '<option value="poster"' + (h.style === 'poster' ? ' selected' : '') + '>Poster (a finished picture that already has its words, e.g. an 11:11 sale design)</option></select></label>' +
+      '<div class="full" data-for="poster"><label style="margin-bottom:6px">Poster picture <small class="muted">— shown whole at its own shape, never cut. Best: 1920 × 1080 (16:9) or 1920 × 600 for a thin strip; JPG, PNG or WebP. Keep important words away from the very edges.</small></label>' +
+        '<div class="uploader" id="pup" style="display:block"><div class="preview" style="display:block;width:100%;height:auto;min-height:80px;background:#eef1f6;border-radius:10px;overflow:hidden">' + posterPrev() + '</div>' +
+        '<div class="btns" style="margin-top:8px"><input type="file" accept="image/jpeg,image/png,image/webp" aria-label="Upload the poster picture"><span class="muted" id="pupInfo" style="font-size:12px"></span></div></div></div>' +
+      '<label data-for="card">Small label<input name="eyebrow" value="' + esc(h.eyebrow) + '"></label>' +
+      '<label data-for="card">Button text<input name="cta" value="' + esc(h.cta) + '"></label>' +
+      '<label class="full"><span id="titleLbl">Title</span><input name="title" required maxlength="60" value="' + esc(h.title) + '"></label>' +
+      '<label class="full" data-for="card">Subtitle<input name="subtitle" value="' + esc(h.subtitle) + '"></label>' +
       '<label>Opens<input name="link" list="hlinks" value="' + esc(h.link) + '"><datalist id="hlinks">' + linkOptions().map(function (l) { return '<option value="' + l + '">'; }).join('') + '</datalist></label>' +
-      '<label>Background colour<input type="color" name="color" value="' + esc(h.color) + '"></label>' +
-      '<label>Picture (if no image)<select name="shape">' + Object.keys(SCG.SHAPES).map(function (s) { return '<option' + (s === h.shape ? ' selected' : '') + '>' + s + '</option>'; }).join('') + '</select></label>' +
-      '<div class="full"><label style="margin-bottom:8px">Image (optional; a product photo on a plain background works best)</label><div class="uploader" id="hup"><div class="preview" style="background:' + esc(h.color) + '">' + prev() + '</div><div class="btns"><input type="file" accept="image/*" aria-label="Upload a picture"><button type="button" class="btn sm danger" data-rm-img>Remove</button></div></div></div>' +
+      '<label data-for="card">Background colour<input type="color" name="color" value="' + esc(h.color) + '"></label>' +
+      '<label data-for="card">Picture (if no image)<select name="shape">' + Object.keys(SCG.SHAPES).map(function (s) { return '<option' + (s === h.shape ? ' selected' : '') + '>' + s + '</option>'; }).join('') + '</select></label>' +
+      '<div class="full" data-for="card"><label style="margin-bottom:8px">Image (optional; a product photo on a plain background works best)</label><div class="uploader" id="hup"><div class="preview" style="background:' + esc(h.color) + '">' + prev() + '</div><div class="btns"><input type="file" accept="image/*" aria-label="Upload a picture"><button type="button" class="btn sm danger" data-rm-img>Remove</button></div></div></div>' +
       '<div class="form-foot"><button type="button" class="btn" data-close>Cancel</button><button class="btn primary">Save</button></div></form>');
     var f = $('#hform'), E = f.elements;
-    bindUploader($('#hup'), prev, function (u) { h.image = u; });
+    h.image = cardImg;
+    bindUploader($('#hup'), prev, function (u) { cardImg = u; h.image = u; });
+    bindUploader($('#pup'), posterPrev, function (u) {   // up to 1920 px wide, high quality, so the words stay sharp
+      posterImg = u; $('#pup .preview').innerHTML = posterPrev();
+      var im = $('#pup .preview img'); if (im) im.onload = function () { $('#pupInfo').textContent = im.naturalWidth + ' × ' + im.naturalHeight + ' — shown whole on the website'; };
+    }, 1920, 0.9);
+    function showType() {
+      var poster = E.style.value === 'poster';
+      $$('[data-for]', f).forEach(function (el) { el.hidden = el.getAttribute('data-for') !== (poster ? 'poster' : 'card'); });
+      $('#titleLbl').textContent = poster ? 'Short description (read aloud to blind visitors; not shown on the picture)' : 'Title';
+    }
+    E.style.onchange = showType; showType();
     E.shape.onchange = E.color.oninput = function () { h.shape = E.shape.value; h.color = E.color.value; $('#hup .preview').style.background = h.color; if (!h.image) $('#hup .preview').innerHTML = prev(); };
     f.onsubmit = function (e) {
       e.preventDefault();
-      ['eyebrow', 'cta', 'title', 'subtitle', 'link', 'color', 'shape'].forEach(function (k) { h[k] = E[k].value; });
+      ['eyebrow', 'cta', 'title', 'subtitle', 'link', 'color', 'shape', 'style'].forEach(function (k) { h[k] = E[k].value; });
+      if (h.style === 'poster') { if (!posterImg) { toast('Choose the poster picture first'); return; } h.image = posterImg; }
+      else h.image = cardImg;
       if (i > -1) db.hero[i] = h; else db.hero.push(h);
       commit('Banner saved'); closeModal(); route();
     };
@@ -1276,5 +1314,959 @@
     $('#rstOrders').onclick = function () { if (confirm('Delete ALL orders? This cannot be undone.')) { SCG.saveOrders([]); toast('All orders deleted'); route(); } };
   }
 
-  if (loggedIn()) showApp();
+  /* =========================================================
+     SERVER (API) MODE — real staff login, permissions and database
+     Everything above keeps working unchanged; this block swaps the
+     browser-only parts (login, orders, customers, backups) for server ones.
+     ========================================================= */
+  if (SCG.API) (function () {
+    var me = null, saveMsg = '';
+    var can = function (p) { return !!(me && me.permissions && me.permissions.indexOf(p) > -1); };
+    var rs = function (n) { return money(n); };
+    var ST = { pending_payment: 'Waiting for card payment', awaiting_bank_transfer: 'Waiting for bank transfer', confirmed: 'Confirmed', processing: 'Packing', shipped: 'Shipped', arrived_lk: 'Arrived in Sri Lanka', delivered: 'Delivered', cancelled: 'Cancelled', expired: 'Expired (not paid)', refunded: 'Refunded' };
+    var PAY = { pending: 'Payment pending', paid: 'Paid', cod_pending: 'COD – not collected', cod_collected: 'COD – cash collected', failed: 'Failed', cancelled: 'Cancelled', chargeback: 'CHARGEBACK', refunded: 'Refunded', partially_refunded: 'Partly refunded', unpaid: 'Unpaid' };
+    var METHOD = { payhere: 'Card (PayHere)', cod: 'Cash on Delivery', bank_transfer: 'Bank transfer' };
+    var FLOW = ['confirmed', 'processing', 'shipped', 'arrived_lk', 'delivered'];
+    var SHIP = { preparing: 'Being prepared', shipped_abroad: 'Shipped from abroad', arrived_lk: 'Arrived in Sri Lanka', out_for_delivery: 'Out for delivery', delivered: 'Delivered', returned: 'Returned to us' };
+    var nice = function (code) { return String(code == null ? '' : code).replace(/_/g, ' '); };
+    var when = function (t) { return t ? new Date(t).toLocaleString() : ''; };
+    var fail = function (err) { toast(err && err.message || 'Something went wrong'); };
+    function refreshPreview() { var f = $('#pvIf'); if (f && f.contentWindow) try { f.contentWindow.postMessage({ type: 'scg-refresh' }, location.origin); } catch (e) {} }
+
+    // ---------- login ----------
+    var hint = $('#defHint'); if (hint) hint.hidden = true;
+    loggedIn = function () { return !!me; };
+    showApp = function () {
+      $('#login').hidden = true; $('#shell').hidden = false;
+      db = SCG.load();
+      applyPermissions(); route();
+    };
+    function afterAuth(staff) {
+      if (!staff) return false;
+      me = staff; me.permissions = (SCG.load().me && SCG.load().me.permissions) || staff.permissions || [];
+      if (staff.mustChangePassword) { forcePasswordChange(); return true; }
+      if (staff.needsMfa) { showMfa(); return true; }
+      if (staff.needsPin) { showPin(); return true; }
+      try { localStorage.setItem('scg_admin_on', String(Date.now())); } catch (e) {}   // only shows the ADMIN bar on the website; not a login
+      showApp(); return true;
+    }
+    $('#loginForm').onsubmit = function (e) {
+      e.preventDefault();
+      var f = e.target, btn = f.querySelector('button:not(.pw-eye)'); btn.disabled = true; $('#loginErr').textContent = '';
+      SCG.adminLogin(f.elements.user.value.trim(), f.elements.pass.value).then(function (staff) { btn.disabled = false; f.elements.pass.value = ''; afterAuth(staff); },
+        function (err) { btn.disabled = false; $('#loginErr').textContent = err.message; });
+    };
+    $('#logout').onclick = function () {
+      SCG.adminLogout().then(function () { try { localStorage.removeItem('scg_admin_on'); localStorage.removeItem('scg_edit_mode'); } catch (e) {} location.hash = ''; location.reload(); });
+    };
+    function forcePasswordChange() {
+      $('#login').hidden = false;
+      $('#loginForm').innerHTML = '<h1>Set your own password</h1><p>Your account was created with a temporary password. Choose a new one (12+ characters).</p>' +
+        '<label>Temporary password<input name="cur" type="password" required autocomplete="current-password"></label><label>New password<input name="pw" type="password" required minlength="12" autocomplete="new-password"></label>' +
+        '<div class="login-err" id="loginErr"></div><button class="btn primary full">Save and continue</button>';
+      $('#loginForm').onsubmit = function (e) {
+        e.preventDefault(); var E = e.target.elements;
+        SCG.api('POST', '/admin/auth/password', { currentPassword: E.cur.value, newPassword: E.pw.value })
+          .then(function () { return SCG.adminLogout(); })           // sign in again so the new password takes effect everywhere
+          .then(function () { location.reload(); }, function (err) { $('#loginErr').textContent = err.message; });
+      };
+    }
+    // Two-step sign-in (Supabase MFA, TOTP authenticator app). Required for staff; checked again by the database on every action.
+    function showMfa() {
+      var M = window.SCGSupabase && window.SCGSupabase.mfa;
+      if (!M) { $('#loginErr').textContent = 'Two-step sign-in is required but not available.'; return; }
+      $('#login').hidden = false;
+      var form = $('#loginForm');
+      form.innerHTML = '<h1>Two-step sign-in</h1><p class="muted" id="mfaHelp">Checking…</p><div id="mfaQr" style="text-align:center"></div>' +
+        '<label>6-digit code from your authenticator app<input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,7}" required></label>' +
+        '<div class="login-err" id="loginErr"></div><button class="btn primary full">Continue</button><button type="button" class="btn link full" id="mfaOut">Use another account</button>';
+      $('#mfaOut').onclick = function () { SCG.adminLogout().then(function () { location.reload(); }); };
+      var factorId = null;
+      M.status().then(function (s) {
+        if (s.factors.length) { factorId = s.factors[0].id; $('#mfaHelp').textContent = 'Open your authenticator app (Google Authenticator, Microsoft Authenticator, Authy…) and type the code for Source Connect.'; return; }
+        return M.enroll().then(function (f) {
+          factorId = f.id;
+          $('#mfaHelp').textContent = 'First time: scan this QR code with an authenticator app on your phone, then type the 6-digit code it shows.';
+          var qr = f.totp && f.totp.qr_code ? '<img alt="QR code for your authenticator app" style="width:180px;height:180px;background:#fff;padding:8px;border-radius:8px" src="' +
+            (f.totp.qr_code.indexOf('data:') === 0 ? f.totp.qr_code : 'data:image/svg+xml;utf8,' + encodeURIComponent(f.totp.qr_code)) + '">' : '';
+          $('#mfaQr').innerHTML = qr + '<p class="muted" style="font-size:12px;word-break:break-all">Or type this key: <b>' + esc(f.totp && f.totp.secret || '') + '</b></p>';
+        });
+      }).catch(function (e) { $('#loginErr').textContent = e.message; });
+      form.onsubmit = function (e) {
+        e.preventDefault();
+        if (!factorId) return;
+        M.verify(factorId, e.target.elements.code.value).then(function () { location.reload(); }, function () { $('#loginErr').textContent = 'That code did not work. Check the time on your phone and try again.'; });
+      };
+    }
+    // Second step with the admin PIN the owner set (when the owner chose PIN instead of the authenticator app).
+    // The database checks the PIN, counts wrong tries and locks after 5; this form only sends it.
+    function showPin() {
+      $('#login').hidden = false;
+      var form = $('#loginForm');
+      form.innerHTML = '<h1>Admin PIN</h1><p class="muted">Enter the PIN the owner gave you.</p>' +
+        '<label>PIN<input name="pin" type="password" inputmode="numeric" autocomplete="off" pattern="[0-9]{4,8}" maxlength="8" required></label>' +
+        '<div class="login-err" id="loginErr"></div><button class="btn primary full" id="pinGo">Continue</button><button type="button" class="btn link full" id="mfaOut">Use another account</button>';
+      $('#mfaOut').onclick = function () { SCG.adminLogout().then(function () { location.reload(); }); };
+      form.elements.pin.focus();
+      form.onsubmit = function (e) {
+        e.preventDefault();
+        var go = $('#pinGo'); go.disabled = true; $('#loginErr').textContent = '';
+        SCG.api('POST', '/admin/auth/pin', { pin: e.target.elements.pin.value.trim() }).then(function (r) {
+          if (r && r.ok) { location.reload(); return; }
+          go.disabled = false; e.target.elements.pin.value = ''; $('#loginErr').textContent = (r && r.message) || 'That PIN did not work.';
+        }, function (err) { go.disabled = false; $('#loginErr').textContent = err.message; });
+      };
+    }
+    // hide menu items this person cannot use
+    var NEED = { dashboard: 'dashboard.view', orders: 'orders.read', customers: 'customers.read', products: 'catalog.read', flash: 'content.write', categories: 'catalog.write', origins: 'settings.write',
+      collections: 'catalog.read', homepage: 'content.write', banners: 'content.write', header: 'content.write', pages: 'content.write', settings: 'content.write', editor: 'catalog.read',
+      staff: 'staff.manage', audit: 'audit.read', backups: 'backups.read', coupons: 'coupons.manage', reports: 'reports.view', renewals: 'renewals.manage', access: 'dashboard.view', usage: 'usage.view', reviews: 'reviews.manage', returns: 'returns.manage' };
+    // plain names for what can be asked for / given on top of a role
+    var PERM_NAME = { 'dashboard.view': 'Dashboard', 'reports.view': 'Sales & profit reports', 'costs.write': 'Cost prices', 'catalog.read': 'See products',
+      'catalog.write': 'Add and edit products, photos, categories and collections', 'inventory.adjust': 'Change stock', 'orders.read': 'See orders',
+      'orders.update': 'Change order and shipment status', 'payments.read': 'See payment details', 'payments.verify': 'Confirm bank transfers and cash collected',
+      'refunds.create': 'Refunds and cancelling paid orders', 'customers.read': 'See customer names, phones and addresses', 'customers.write': 'Edit or disable customer accounts',
+      'content.write': 'Banners, homepage, header/footer, pages and flash sale', 'settings.write': 'Delivery fees, payment options and import countries',
+      'coupons.manage': 'Promo codes', 'usage.view': 'Hosting usage (database, photos, users)', 'audit.read': 'Audit log', 'backups.read': 'Backup status', 'renewals.manage': 'Renewal reminders', 'reviews.manage': 'Product reviews (hide and reply)', 'returns.manage': 'Return / refund requests' };
+    var permName = function (c, d) { return PERM_NAME[c] || d || c; };
+    function applyPermissions() {
+      var nav = $('#sideNav');
+      if (!$('#sideNav [data-v=reports]')) {
+        var dash = $('#sideNav a[data-v=dashboard]');
+        if (dash) dash.insertAdjacentHTML('afterend', '<a href="#reports" data-v="reports"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Sales &amp; Profit</a>');
+      }
+      if (!$('#sideNav [data-v=usage]')) {
+        var rep = $('#sideNav a[data-v=reports]');
+        if (rep) rep.insertAdjacentHTML('afterend', '<a href="#usage" data-v="usage"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9M12 12l5-5M12 3v4M21 12h-4"/></svg>Usage</a>');
+      }
+      if (!$('#sideNav [data-v=returns]')) {
+        var ord = $('#sideNav a[data-v=orders]');
+        if (ord) ord.insertAdjacentHTML('afterend', '<a href="#returns" data-v="returns"><svg viewBox="0 0 24 24"><path d="M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3"/></svg>Returns <span class="pill" id="rtPill"></span></a>');
+      }
+      if (!$('#sideNav [data-v=reviews]')) {
+        var prod = $('#sideNav a[data-v=products]');
+        if (prod) prod.insertAdjacentHTML('afterend', '<a href="#reviews" data-v="reviews"><svg viewBox="0 0 24 24"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/></svg>Reviews</a>');
+      }
+      if (!$('#sideNav [data-v=staff]')) {
+        nav.insertAdjacentHTML('beforeend', '<small class="side-label">Security &amp; data</small>' +
+          '<a href="#coupons" data-v="coupons"><svg viewBox="0 0 24 24"><path d="M3 12V4h8l10 10-8 8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>Promo Codes</a>' +
+          '<a href="#staff" data-v="staff"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2 20c1-4 4-6 7-6s6 2 7 6M17 11l2 2 4-4"/></svg>Staff &amp; Roles</a>' +
+          '<a href="#audit" data-v="audit"><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6zM9 12h7M9 16h7M9 8h3"/></svg>Audit Log</a>' +
+          '<a href="#backups" data-v="backups"><svg viewBox="0 0 24 24"><path d="M4 7c0-2 16-2 16 0v10c0 2-16 2-16 0zM4 7c0 2 16 2 16 0M4 12c0 2 16 2 16 0"/></svg>Backups <span class="pill" id="bkPill"></span></a>' +
+          '<a href="#renewals" data-v="renewals"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4M12 14v3l2 1"/></svg>Renewals <span class="pill" id="rnPill"></span></a>' +
+          '<a href="#access" data-v="access"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>My Access</a>');
+        var st = $('#sideNav a[data-v=staff]'); if (st) st.insertAdjacentHTML('beforeend', ' <span class="pill" id="acPill"></span>');
+      }
+      $$('#sideNav a[data-v]').forEach(function (a) { var p = NEED[a.dataset.v]; a.hidden = !!(p && !can(p)); });
+      var who = $('.side-brand small'); if (who && me) who.textContent = (me.displayName || me.username).toUpperCase() + ' · ' + (me.mainAdmin ? 'MAIN ADMIN' : 'CO-ADMIN');
+      checkRenewals(); checkAccessRequests(); checkReturns();
+    }
+    // how many return requests wait for a first answer (shown on "Returns")
+    function checkReturns() {
+      if (!me || !can('returns.manage')) return;
+      SCG.api('GET', '/admin/returns?filter=requested').then(function (d) { var p = $('#rtPill'); if (p) p.textContent = d.counts.requested ? String(d.counts.requested) : ''; }, function () {});
+    }
+    window.addEventListener('hashchange', function () { if (me) checkReturns(); });   // new requests show up while staff move around the admin
+    // main admin: how many access requests wait for an answer (shown on "Staff & Roles")
+    function checkAccessRequests() {
+      if (!me || !can('staff.manage')) return;
+      SCG.api('GET', '/admin/access').then(function (d) { var p = $('#acPill'); if (p) p.textContent = d.pending ? String(d.pending) : ''; }, function () {});
+    }
+
+    // ---------- usage: how much of the hosting plan is used ----------
+    // Plan amounts from the Supabase and Cloudflare documentation (checked 2026-11-16). Update here if the plan changes.
+    var PLAN = { diskGB: 8, storageGB: 100, mau: 100000, egressGB: 250 };
+    // ---------- return / refund requests ----------
+    var RET_REASON = { damaged: 'Arrived damaged', not_working: 'Does not work / faulty', wrong_item: 'Wrong item sent', not_as_described: 'Different from the description or photos', missing_parts: 'Parts or items missing' };
+    var RET_STATUS = { requested: 'Waiting for you', approved: 'Approved', rejected: 'Rejected', received: 'Item received', refunded: 'Refunded', replaced: 'Replacement sent', cancelled: 'Withdrawn by customer' };
+    VIEWS.returns = { title: 'Returns', sub: 'Return and refund requests from customers after delivery', render: function (v) {
+      var st = { filter: 'open', list: [], canRefund: false }, h0 = location.hash;
+      var PAY = { cod: 'Cash on Delivery', bank_transfer: 'Bank transfer', payhere: 'Card (PayHere)' };
+      function card(x) {
+        var itemsTotal = x.items.reduce(function (n, it) { return n + it.unitPrice * it.qty; }, 0);
+        var left = Math.max(0, Math.round((x.orderTotal - x.refundedSoFar) * 100) / 100), suggest = Math.min(itemsTotal, left);
+        var act = '';
+        if (x.status === 'requested') act = '<button class="btn sm primary" data-act="approve">Approve</button><button class="btn sm danger" data-act="reject">Reject</button>';
+        if (x.status === 'approved') act = '<label class="chk"><input type="checkbox" class="rt-restock" checked> Put the items back in stock</label><button class="btn sm primary" data-act="receive">Item received</button><button class="btn sm danger" data-act="reject">Reject</button>';
+        if (x.status === 'received') act = '<button class="btn sm primary" data-act="replace">Replacement sent</button>';
+        var refund = st.canRefund && (x.status === 'approved' || x.status === 'received') ?
+          '<div class="rt-refund"><b>Refund</b> <small class="muted">(order total ' + rs(x.orderTotal) + (x.refundedSoFar ? ', already refunded ' + rs(x.refundedSoFar) : '') + ')</small><div class="rt-refund-row">' +
+            '<label>Amount (Rs.)<input type="number" class="rt-amount" min="0.01" step="0.01" max="' + left + '" value="' + suggest + '"></label>' +
+            '<label>Reference<input class="rt-ref" maxlength="80" placeholder="' + (x.paymentMethod === 'payhere' ? 'PayHere refund ID' : 'Bank transfer reference') + '"></label>' +
+            '<button class="btn sm primary" data-act="refund">Record refund</button></div>' +
+            (x.paymentMethod === 'payhere' ? '<small class="muted">Refund the card first in the PayHere merchant portal, then record it here.</small>' : '<small class="muted">Transfer the money to the account below first, then record it here.</small>') + '</div>' : '';
+        return '<div class="panel rt-card" data-id="' + x.id + '"><div class="rt-head"><b>Return #' + x.id + '</b><span class="pill">' + esc(RET_STATUS[x.status] || x.status) + '</span><span class="muted">order ' + esc(x.order) + ' · ' + when(x.createdAt) + '</span></div>' +
+          '<div class="rt-grid"><div><small class="muted">Customer</small><br><b>' + esc(x.customer) + '</b> · ' + esc(x.phone) + '</div>' +
+            '<div><small class="muted">Payment</small><br>' + esc(PAY[x.paymentMethod] || x.paymentMethod) + ' · ' + esc(String(x.paymentStatus).replace(/_/g, ' ')) + '</div>' +
+            '<div><small class="muted">Delivered</small><br>' + (x.deliveredAt ? when(x.deliveredAt) : '—') + '</div>' +
+            '<div><small class="muted">Customer wants</small><br><b>' + (x.wants === 'refund' ? 'Money back' : 'Replacement') + '</b></div></div>' +
+          '<ul class="rt-items">' + x.items.map(function (it) { return '<li>' + esc(it.name) + (it.variant ? ' <small class="muted">' + esc(it.variant) + '</small>' : '') + ' × ' + it.qty + ' <small class="muted">(' + rs(it.unitPrice) + ' each)</small></li>'; }).join('') + '</ul>' +
+          '<p style="margin:6px 0"><b>' + esc(RET_REASON[x.reason] || x.reason) + ':</b> <span class="rt-text">' + esc(x.details) + '</span></p>' +
+          (x.photos.length ? '<div class="rt-photos">' + x.photos.map(function (ph, i) { return '<button type="button" class="rt-ph" data-ph="' + esc(ph) + '">Photo ' + (i + 1) + '</button>'; }).join('') + '</div>' : '<p class="muted" style="margin:4px 0;font-size:13px">No photos.</p>') +
+          (x.bank ? '<div class="rt-bank"><small class="muted">Pay the refund into</small><br>' + esc(x.bank.bank) + (x.bank.branch ? ', ' + esc(x.bank.branch) : '') + ' · ' + esc(x.bank.accountName) + ' · <b>' + esc(x.bank.accountNumber) + '</b></div>' : '') +
+          (x.refund ? '<p style="margin:6px 0;color:#15803d"><b>Refunded ' + rs(x.refund) + '</b> · ref ' + esc(x.refundReference || '') + '</p>' : '') +
+          (x.restocked ? '<p class="muted" style="margin:4px 0;font-size:13px">Items were put back in stock.</p>' : '') +
+          (act || refund ? '<label class="rt-note">Message to the customer <small class="muted">(shown on their order; required when rejecting)</small><textarea maxlength="500" rows="2">' + esc(x.staffNote || '') + '</textarea></label>' +
+            '<div class="rv-actions">' + act + '</div>' + refund
+            : (x.staffNote ? '<div class="rt-msg"><small class="muted">Your message</small><br>' + esc(x.staffNote) + '</div>' : '')) + '</div>';
+      }
+      function load(more) {
+        if (!more) st.list = [];
+        SCG.api('GET', '/admin/returns?filter=' + st.filter + '&offset=' + st.list.length).then(function (d) { if (location.hash !== h0) return;
+          st.list = st.list.concat(d.requests); st.canRefund = d.canRefund; var c = d.counts;
+          var total = { open: c.open, requested: c.requested, approved: c.approved, received: c.received, closed: c.closed, all: c.all }[st.filter];
+          var pill = $('#rtPill'); if (pill) pill.textContent = c.requested ? String(c.requested) : '';
+          v.innerHTML = '<div class="filters">' + [['open', 'Open', c.open], ['requested', 'Waiting for you', c.requested], ['approved', 'Approved', c.approved], ['received', 'Received', c.received], ['closed', 'Closed', c.closed], ['all', 'All', c.all]].map(function (f) {
+              return '<button class="btn sm' + (st.filter === f[0] ? ' primary' : '') + '" data-f="' + f[0] + '">' + f[1] + ' (' + f[2] + ')</button>'; }).join('') + '</div>' +
+            '<p class="muted" style="margin-top:0;font-size:13px">Steps: <b>Approve</b> (or Reject with a reason) → collect the item → <b>Item received</b> (tick “back in stock” if it can be sold again) → <b>Replacement sent</b> or <b>Record refund</b>. ' +
+              (d.canRefund ? 'Recording a refund needs the money to be paid back first.' : 'Recording a refund needs the “Refunds” permission (main admin / finance).') + '</p>' +
+            (st.list.length ? st.list.map(card).join('') : '<div class="panel"><p class="muted" style="margin:0">' + (st.filter === 'open' ? 'No open return requests.' : 'Nothing here.') + '</p></div>') +
+            (st.list.length < total ? '<button class="btn" id="rtMore">Show more</button>' : '');
+        }, function (err) { if (location.hash !== h0) return; v.innerHTML = '<p class="muted">' + esc(err.message) + '</p>'; });
+      }
+      v.innerHTML = '<p class="muted">Loading…</p>';
+      v.onclick = function (e) {
+        var f = e.target.closest('[data-f]'); if (f) { st.filter = f.dataset.f; load(false); return; }
+        if (e.target.closest('#rtMore')) { load(true); return; }
+        var ph = e.target.closest('[data-ph]');
+        if (ph) { var w = window.open('', '_blank'); SCG.api('POST', '/admin/returns/photo', { path: ph.dataset.ph }).then(function (r) { if (w) w.location = r.url; else location.href = r.url; }, function (err) { if (w) w.close(); fail(err); }); return; }
+        var b = e.target.closest('[data-act]'); if (!b) return;
+        var c = b.closest('.rt-card'), act = b.dataset.act, note = (c.querySelector('.rt-note textarea') || {}).value || '', data = {};
+        if (act === 'reject' && note.trim().length < 5) { toast('Write the reason for the customer first'); c.querySelector('.rt-note textarea').focus(); return; }
+        if (act === 'receive') data.restock = !!(c.querySelector('.rt-restock') || {}).checked;
+        if (act === 'refund') {
+          data.amount = Number(c.querySelector('.rt-amount').value); data.reference = c.querySelector('.rt-ref').value.trim();
+          if (!(data.amount > 0)) { toast('Enter the refund amount'); return; }
+          if (data.reference.length < 3) { toast('Enter the refund reference'); return; }
+          if (!confirm('Record a refund of Rs. ' + data.amount.toLocaleString() + ' for return #' + c.dataset.id + '? This cannot be undone.')) return;
+        }
+        if (act === 'reject' && !confirm('Reject return #' + c.dataset.id + '? The customer will see your message.')) return;
+        b.disabled = true;
+        SCG.api('PUT', '/admin/returns/' + c.dataset.id, { action: act, note: note.trim(), data: data }).then(function () {
+          toast({ approve: 'Approved', reject: 'Rejected', receive: 'Marked as received', replace: 'Marked as replaced', refund: 'Refund recorded' }[act]); load(false);
+        }, function (err) { b.disabled = false; fail(err); });
+      };
+      load(false);
+    } };
+
+    // ---------- product reviews: written by buyers after delivery; staff hide abuse and reply ----------
+    VIEWS.reviews = { title: 'Reviews', sub: 'Ratings and opinions from customers who received their order', render: function (v) {
+      var st = { filter: 'all', list: [] }, h0 = location.hash;
+      var starTxt = function (n) { return '<span class="rv-stars" aria-label="' + n + ' out of 5">' + '★★★★★'.slice(0, n) + '<span>' + '★★★★★'.slice(n) + '</span></span>'; };
+      function card(x) {
+        return '<div class="panel rv-card' + (x.status === 'hidden' ? ' rv-hidden' : '') + '" data-id="' + x.id + '">' +
+          '<div class="rv-head">' + starTxt(x.rating) + '<b>' + esc(x.productName) + '</b>' + (x.variant ? ' <small class="muted">' + esc(x.variant) + '</small>' : '') +
+            (x.status === 'hidden' ? ' <span class="pill">Hidden</span>' : '') + '</div>' +
+          '<small class="muted">' + esc(x.buyer) + ' (shown as “' + esc(x.name) + '”) · order ' + esc(x.order) + ' · ' + when(x.at) + '</small>' +
+          (x.comment ? '<p class="rv-text">' + esc(x.comment) + '</p>' : '<p class="muted rv-text">Stars only, no written review.</p>') +
+          '<label class="rv-reply">Your public reply' + (x.repliedAt ? ' <small class="muted">(' + when(x.repliedAt) + ')</small>' : '') +
+            '<textarea maxlength="1000" rows="2" placeholder="Thank the customer, or explain how you will fix the problem">' + esc(x.reply || '') + '</textarea></label>' +
+          '<div class="rv-actions"><button class="btn sm primary" data-act="reply">' + (x.reply ? 'Save reply' : 'Reply') + '</button>' +
+            (x.status === 'hidden' ? '<button class="btn sm" data-act="show">Show on the website</button>' : '<button class="btn sm danger" data-act="hide">Hide from the website</button>') + '</div></div>';
+      }
+      function load(more) {
+        if (!more) st.list = [];
+        SCG.api('GET', '/admin/reviews?filter=' + st.filter + '&offset=' + st.list.length).then(function (d) { if (location.hash !== h0) return;
+          st.list = st.list.concat(d.reviews); var c = d.counts, total = { all: c.all, low: c.low, unanswered: c.unanswered, hidden: c.hidden }[st.filter];
+          v.innerHTML = '<div class="filters">' + [['all', 'All', c.all], ['low', '1–2 stars', c.low], ['unanswered', 'Not answered', c.unanswered], ['hidden', 'Hidden', c.hidden]].map(function (f) {
+              return '<button class="btn sm' + (st.filter === f[0] ? ' primary' : '') + '" data-f="' + f[0] + '">' + f[1] + ' (' + f[2] + ')</button>'; }).join('') +
+              '<span class="muted" style="align-self:center;font-size:13px">' + c.week + ' new in the last 7 days</span></div>' +
+            '<p class="muted" style="margin-top:0;font-size:13px">Only customers whose order was delivered can review, so every review is a real purchase. Hide a review only if it is abusive, off-topic or shares private details — not because it is negative. Answering a bad review politely builds trust.</p>' +
+            (st.list.length ? st.list.map(card).join('') : '<div class="panel"><p class="muted" style="margin:0">' + (st.filter === 'all' ? 'No reviews yet. They appear here when customers rate a delivered order.' : 'Nothing here.') + '</p></div>') +
+            (st.list.length < total ? '<button class="btn" id="rvMore">Show more</button>' : '');
+        }, function (err) { if (location.hash !== h0) return; v.innerHTML = '<p class="muted">' + esc(err.message) + '</p>'; });
+      }
+      v.innerHTML = '<p class="muted">Loading…</p>';
+      v.onclick = function (e) {
+        var f = e.target.closest('[data-f]'); if (f) { st.filter = f.dataset.f; load(false); return; }
+        if (e.target.closest('#rvMore')) { load(true); return; }
+        var b = e.target.closest('[data-act]'); if (!b) return;
+        var cardEl = b.closest('.rv-card'), id = cardEl.dataset.id, act = b.dataset.act, body = {};
+        if (act === 'reply') body.reply = cardEl.querySelector('textarea').value.trim();
+        if (act === 'hide') { if (!confirm('Hide this review from the product page? The rating is also removed from the average.')) return; body.status = 'hidden'; }
+        if (act === 'show') body.status = 'visible';
+        b.disabled = true;
+        SCG.api('PUT', '/admin/reviews/' + id, body).then(function () {
+          toast(act === 'reply' ? (body.reply ? 'Reply saved — it shows under the review' : 'Reply removed') : act === 'hide' ? 'Review hidden' : 'Review shown again'); load(false); refreshPreview();
+        }, function (err) { b.disabled = false; fail(err); });
+      };
+      load(false);
+    } };
+
+    VIEWS.usage = { title: 'Usage', sub: 'How much of the Supabase Pro plan the shop uses', render: function (v) {
+      v.innerHTML = '<p class="muted">Loading…</p>';
+      var h0 = location.hash;
+      SCG.api('GET', '/admin/usage').then(function (u) { if (location.hash !== h0) return;
+        var GB = 1073741824;
+        var size = function (b) { return b >= GB ? (b / GB).toFixed(2) + ' GB' : b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : Math.max(0, Math.round(b / 1024)) + ' KB'; };
+        var num = function (n) { return Number(n).toLocaleString('en-US'); };
+        var bar = function (label, used, cap, usedTxt, capTxt, note) {
+          var pct = cap > 0 ? used / cap * 100 : 0, shown = pct < 0.1 && used > 0 ? '< 0.1' : pct.toFixed(pct < 10 ? 1 : 0);
+          var cls = pct >= 90 ? 'red' : pct >= 70 ? 'warn' : 'ok';
+          return '<div class="use-row"><div class="use-head"><b>' + esc(label) + '</b><span>' + esc(usedTxt) + ' of ' + esc(capTxt) + ' <span class="tag ' + cls + '">' + shown + '%</span></span></div>' +
+            '<div class="bar-track use-bar ' + cls + '" role="progressbar" aria-label="' + esc(label) + '" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.min(100, Math.round(pct)) + '"><i style="width:' + Math.min(100, Math.max(pct, used > 0 ? 0.6 : 0)) + '%"></i></div>' +
+            (note ? '<small class="muted">' + note + '</small>' : '') + '</div>';
+        };
+        var ref = (/^https:\/\/([a-z0-9]+)\.supabase\.co$/.exec((window.SCGSupabase && SCGSupabase.url) || '') || [])[1];   // only for the hosted project
+        var dash = ref ? 'https://supabase.com/dashboard/project/' + ref : '';
+        v.innerHTML =
+          '<div class="panel"><h3>Supabase Pro plan <small>measured ' + esc(when(u.measuredAt)) + '</small></h3>' +
+            bar('Database', u.databaseBytes, PLAN.diskGB * GB, size(u.databaseBytes), PLAN.diskGB + ' GB disk included', 'The disk grows by itself on Pro when it is 90% full (extra disk is billed). Keep an eye above 70%.') +
+            bar('Photos and files', u.storageBytes, PLAN.storageGB * GB, size(u.storageBytes), PLAN.storageGB + ' GB included', num(u.storageFiles) + ' files.') +
+            bar('Accounts signed in this month', u.signedInThisMonth, PLAN.mau, num(u.signedInThisMonth), num(PLAN.mau) + ' monthly active users included',
+              'Counted from the first of the month (Sri Lanka time). Supabase also counts token refreshes and uses your billing dates, so its own number can be a little higher.') +
+            bar('Database connections right now', u.connections, u.maxConnections, num(u.connections), num(u.maxConnections) + ' allowed', 'Includes Supabase\'s own services. Visitors do not each hold a connection.') +
+          '</div>' +
+          '<div class="panel"><h3>The shop</h3><div class="stats">' +
+            stat('Orders today', num(u.ordersToday), '#2563eb') + stat('Orders this month', num(u.ordersThisMonth), '#16a34a') + stat('Orders in total', num(u.ordersTotal), '#0b2a6f') +
+            stat('Products on sale', num(u.products), '#d97706') + stat('Customer accounts', num(u.customers), '#9333ea') + stat('Active staff', num(u.staff), '#64748b') +
+          '</div></div>' +
+          '<div class="panel"><h3>Not measured here</h3>' +
+            '<p style="margin-top:0"><b>Data sent to visitors (egress)</b>: ' + PLAN.egressGB + ' GB a month included on Pro. Supabase measures this outside the database, so see it on the Supabase dashboard → <b>Organization → Usage</b>' + (dash ? ' (<a href="' + esc(dash) + '" target="_blank" rel="noopener">open the project</a>)' : '') + '.</p>' +
+            '<p><b>Website pages and pictures in the site itself</b> are served by Cloudflare Pages: requests to them are free and unlimited.</p>' +
+            '<p style="margin-bottom:0"><b>Load test (16 Nov 2026)</b>: 100 visitors opening the shop at the same moment, without a pause → 214 page loads a second, 0 errors, 95% answered within 0.6 s. Tested with 1 product; repeat the test when the catalogue is full.</p>' +
+          '</div>';
+      }, function (err) { if (location.hash !== h0) return; v.innerHTML = '<p class="muted">' + esc(err.message) + '</p>'; });
+    } };
+
+    // ---------- my access: what I may do, and asking the main admin for more ----------
+    VIEWS.access = { title: 'My Access', sub: 'What you can do here, and asking the main admin for more', render: function (v) {
+      v.innerHTML = '<p class="muted">Loading…</p>';
+      var h0 = location.hash;
+      SCG.api('GET', '/admin/access/mine').then(function (d) { if (location.hash !== h0) return;
+        var have = d.permissions.filter(function (p) { return p.have; }), other = d.permissions.filter(function (p) { return !p.have; });
+        var stat = { pending: '<span class="tag warn">waiting for approval</span>', approved: '<span class="tag ok">approved</span>', rejected: '<span class="tag red">not approved</span>', withdrawn: '<span class="tag">withdrawn</span>' };
+        v.innerHTML = (me.mainAdmin ? '<div class="panel"><p style="margin:0"><b>You are the main admin.</b> You can do everything. Requests from co-admins appear on <a href="#staff">Staff &amp; Roles</a>.</p></div>' : '') +
+          '<div class="panel"><h3>You can</h3><div class="filters">' + have.map(function (p) { return '<span class="tag ok">' + esc(permName(p.code, p.description)) + (p.viaRole ? '' : ' (approved)') + '</span>'; }).join('') + '</div></div>' +
+          (other.length ? '<div class="panel"><h3>Ask for more <small>the main admin approves or declines</small></h3>' + other.map(function (p) {
+            return '<div class="sum-row"><span>' + esc(permName(p.code, p.description)) + '</span>' + (p.pending ? stat.pending : '<button class="btn sm" data-ask="' + esc(p.code) + '">Request access</button>') + '</div>'; }).join('') + '</div>' : '') +
+          (d.requests.length ? '<div class="panel"><h3>My requests</h3>' + d.requests.map(function (r) {
+            return '<div class="sum-row"><span>' + esc(permName(r.permission)) + (r.decisionNote ? ' <small class="muted">— ' + esc(r.decisionNote) + '</small>' : '') + '</span><span>' + (stat[r.status] || esc(r.status)) + '</span></div>'; }).join('') + '</div>' : '');
+        v.onclick = function (e) {
+          var b = e.target.closest('[data-ask]'); if (!b) return;
+          var note = prompt('Why do you need "' + permName(b.dataset.ask) + '"? (optional, the main admin sees this)', ''); if (note === null) return;
+          SCG.api('POST', '/admin/access/requests', { permission: b.dataset.ask, note: note.slice(0, 300) }).then(function () { toast('Request sent to the main admin'); route(); }, fail);
+        };
+      }, function (err) { if (location.hash !== h0) return; v.innerHTML = '<p class="muted">' + esc(err.message) + '</p>'; });
+    } };
+
+    // ---------- service renewals (owner): warning banner on every page from N days before the date ----------
+    var rnTimer = null;
+    function rnWhen(n) { return n === 0 ? 'today' : n === 1 ? 'tomorrow' : n > 1 ? 'in ' + n + ' days' : (-n) + ' day' + (n === -1 ? '' : 's') + ' ago'; }
+    function rnDate(ymd) { return new Date(ymd + 'T00:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }); }
+    function checkRenewals() {
+      if (!me || !can('renewals.manage')) return;
+      clearTimeout(rnTimer); rnTimer = setTimeout(checkRenewals, 30 * 60 * 1000);   // check again every 30 minutes while the admin is open
+      SCG.api('GET', '/admin/renewals').then(function (d) {
+        var due = d.items.filter(function (r) { return r.status === 'due_soon' || r.status === 'overdue'; });
+        var pill = $('#rnPill'); if (pill) { pill.textContent = due.length ? String(due.length) : ''; }
+        var b = $('#rnBanner');
+        if (!b) { var view = $('#view'); if (!view) return; view.insertAdjacentHTML('beforebegin', '<div id="rnBanner" class="rn-banner" role="alert" hidden></div>'); b = $('#rnBanner'); }
+        b.hidden = !due.length;
+        b.innerHTML = due.map(function (r) {
+          var what = r.cycle === 'once' ? (r.status === 'overdue' ? 'ended' : 'ends') : 'renews';
+          return '<a href="#renewals"><b>' + (r.status === 'overdue' ? '⚠ ' : '⏰ ') + esc(r.name) + '</b> ' + what + ' <b>' + rnWhen(r.daysLeft) + '</b> (' + rnDate(r.dueOn) + ')' +
+            (r.provider ? ' · ' + esc(r.provider) : '') + (r.note ? ' — ' + esc(r.note) : '') + '</a>';
+        }).join('');
+      }, function () {});
+    }
+    var _route = route;
+    route = function () {
+      var key = location.hash.replace('#', '').split('/')[0] || 'dashboard';
+      if (me && NEED[key] && !can(NEED[key])) { var first = Object.keys(NEED).filter(function (k) { return can(NEED[k]) && VIEWS[k]; })[0]; if (first && first !== key) { location.hash = first; return; } }
+      _route();
+    };
+    window.removeEventListener('hashchange', _route); window.addEventListener('hashchange', route);
+
+    // ---------- saving ----------
+    commit = function (msg) { saveMsg = msg || 'Saved'; if (!SCG.save()) { toast('Not signed in. Reload the page.'); return false; } return true; };
+    SCG.onSync(function (state, info) {
+      if (state === 'saving') toast('Saving…');
+      else if (state === 'saved') { if (info) toast('✓ ' + saveMsg); refreshPreview(); }
+      else if (state === 'error') toast('Not saved: ' + (info && info.message || 'server error'));
+      else if (state === 'reverted') { db = SCG.load(); route(); refreshPreview(); }
+    });
+    window.addEventListener('beforeunload', function (e) { if (SCG.syncing()) { e.preventDefault(); e.returnValue = ''; } });
+
+    // ---------- product form: no hand-typed ratings/sales; stock per size ----------
+    var _productForm = productForm;
+    productForm = function (id, opts) {
+      _productForm(id, opts);
+      var f = $('#modal form'); if (!f) return;
+      ['rating', 'reviews', 'sold'].forEach(function (n) { var i = f.elements[n]; if (i) { i.required = false; i.closest('label').hidden = true; } });
+      var p = id ? SCG.productById(id) : null, det = p && (p.stockDetail || []).filter(function (v) { return v.active; });
+      var st = f.elements.stock;
+      if (!can('inventory.adjust') && st) { st.readOnly = true; st.title = 'You cannot change stock'; }
+      if (det && det.length > 1 && st) {
+        var lab = st.closest('label'); lab.hidden = true;
+        lab.insertAdjacentHTML('afterend', '<div class="full"><b style="font-size:13px">Stock per size</b> <small class="muted">(on the shelf; reserved = held for unpaid orders)</small><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-top:6px">' +
+          det.map(function (v) { return '<label style="font-size:12px">' + esc(v.size || 'One size') + (v.reserved ? ' <small class="muted">(' + v.reserved + ' reserved)</small>' : '') + '<input type="number" min="' + v.reserved + '" data-size="' + esc(v.size) + '" value="' + v.onHand + '"' + (can('inventory.adjust') ? '' : ' readonly') + '></label>'; }).join('') +
+          '</div><small class="muted">New sizes start at 0 — set their stock after saving.</small></div>');
+        f.addEventListener('submit', function () {
+          if (!f.elements.name.value.trim()) return;   // the form will refuse to save without a name: do not queue stock for a save that does not happen
+          var m = {}, total = 0; $$('input[data-size]', f).forEach(function (i) { m[i.dataset.size] = Math.max(0, Math.floor(+i.value || 0)); total += m[i.dataset.size]; });
+          st.value = total; SCG.pendingStock = SCG.pendingStock || {}; SCG.pendingStock[p.id] = m;
+        }, true);
+      }
+      // NEW product with several sizes: ask for the stock of EACH size. (One total would all go to the first size,
+      // leaving the other sizes sold out on the website.)
+      if (!p && st && can('inventory.adjust')) {
+        var lab0 = st.closest('label'), szIn = f.elements.sizes, typed = {};
+        lab0.insertAdjacentHTML('afterend', '<div class="full" id="newStock" hidden></div>');
+        var box = $('#newStock');
+        var sizesNow = function () { var seen = {}; return szIn.value.split(',').map(function (x) { return x.trim(); }).filter(function (x) { if (!x || seen[x]) return false; seen[x] = 1; return true; }); };
+        var sumStock = function () { var t = 0; $$('input[data-nsize]', box).forEach(function (i) { t += Math.max(0, Math.floor(+i.value || 0)); }); var el = $('#newStockSum'); if (el) el.textContent = 'Total: ' + t; return t; };
+        var drawStock = function () {
+          $$('input[data-nsize]', box).forEach(function (i) { typed[i.dataset.nsize] = i.value; });
+          var sz = sizesNow();
+          if (sz.length < 2) { box.hidden = true; box.innerHTML = ''; lab0.hidden = false; return; }
+          lab0.hidden = true; box.hidden = false;
+          box.innerHTML = '<b style="font-size:13px">Stock for each size</b> <small class="muted">(how many you have of each size; type 0 if none)</small>' +
+            '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;margin-top:6px">' +
+            sz.map(function (z) { return '<label style="font-size:12px">' + esc(z) + '<input type="number" min="0" max="1000000" step="1" inputmode="numeric" required placeholder="0" data-nsize="' + esc(z) + '" value="' + esc(typed[z] === undefined ? '' : typed[z]) + '"></label>'; }).join('') +
+            '</div><small class="muted" id="newStockSum"></small>';
+          sumStock();
+        };
+        szIn.addEventListener('input', drawStock); box.addEventListener('input', sumStock);
+        drawStock();
+        f.addEventListener('submit', function () {
+          f._newStock = null;
+          if (box.hidden) return;
+          var m = {}; $$('input[data-nsize]', box).forEach(function (i) { m[i.dataset.nsize] = Math.max(0, Math.floor(+i.value || 0)); });
+          st.value = sumStock(); f._newStock = m;
+        }, true);
+      }
+    };
+    // the API sync reads pending per-size stock from here
+    var _sync = SCG.sync;
+    SCG.sync = function () {
+      var pend = SCG.pendingStock; SCG.pendingStock = null;
+      if (pend) Object.keys(pend).forEach(function (pid) { var pr = SCG.productById(pid); if (pr) pr.stockBySize = pend[pid]; });
+      return _sync();
+    };
+
+    // ---------- dashboard ----------
+    VIEWS.dashboard.render = function (v) {
+      setActions(can('catalog.write') ? '<a class="btn primary" href="#products/new">+ Add Product</a>' : '');
+      v.innerHTML = '<p class="muted">Loading…</p>';
+      var h0 = location.hash;   // draw only if the person is still on this page
+      SCG.api('GET', '/admin/dashboard').then(function (d) { if (location.hash !== h0) return;
+        var dmax = Math.max.apply(null, d.last7days.map(function (x) { return x.total; }).concat([1]));
+        var alerts = [];
+        if (d.needsReview) alerts.push('<a href="#orders/review">⚠ ' + d.needsReview + ' order(s) need review (late payment, chargeback…)</a>');
+        if (d.payments.bank) alerts.push('<a href="#orders/awaiting_bank_transfer">' + d.payments.bank + ' bank transfer(s) to check</a>');
+        if (d.payments.cod_uncollected) alerts.push(d.payments.cod_uncollected + ' delivered COD order(s) with cash not yet recorded');
+        if (d.backups && !d.backups.ok) alerts.push('<a href="#backups">⚠ Backups: ' + esc(d.backups.problems.join(' ')) + '</a>');
+        if (!d.payhere.configured) alerts.push('Card payments (PayHere) are not set up on the server yet');
+        else if (d.payhere.mode === 'sandbox') alerts.push('PayHere is in SANDBOX (test) mode — no real money is taken');
+        var bk = $('#bkPill'); if (bk) { bk.textContent = d.backups && !d.backups.ok ? '!' : ''; bk.className = 'pill' + (d.backups && !d.backups.ok ? ' red' : ''); }
+        v.innerHTML = launchChecklistApi(d) + (alerts.length ? '<div class="panel checklist">' + alerts.map(function (a) { return '<div class="ck"><span class="ck-i">!</span><span>' + a + '</span></div>'; }).join('') + '</div>' : '') +
+          '<div class="stats">' + stat('Money received', rs(d.received), '#0f766e') + stat('Orders value', rs(d.booked), '#f59e0b') + stat('Orders', d.orders, '#0b2a6f') +
+          stat('Need review', d.needsReview, '#d7141a') + stat('Low stock sizes', d.lowStock.length, '#d7141a') + '</div>' +
+          '<div class="cols"><div class="panel"><h3>Sales, last 7 days</h3><div class="chart">' + d.last7days.map(function (x) {
+            return '<div class="col"><div class="bar" style="height:' + Math.max(1, x.total / dmax * 100) + '%" title="' + rs(x.total) + '"></div><b>' + (x.total ? (x.total / 1000).toFixed(1) + 'k' : '0') + '</b><small>' + x.day.slice(5) + '</small></div>';
+          }).join('') + '</div></div>' +
+          '<div class="panel"><h3>Orders by status</h3><div class="status-pills">' + Object.keys(ST).map(function (k) { return '<a href="#orders/' + k + '"><b>' + (d.byStatus[k] || 0) + '</b>' + esc(ST[k]) + '</a>'; }).join('') + '</div></div></div>' +
+          '<div class="panel"><h3>Low stock <small>at or below the reorder level</small></h3>' + (d.lowStock.length ? '<div class="filters">' + d.lowStock.map(function (x) {
+            return '<a class="tag warn" href="#products/edit:' + esc(x.slug) + '">' + esc(x.name) + (x.size ? ' · ' + esc(x.size) : '') + ' · ' + x.available + ' left</a>'; }).join('') + '</div>' : '<p class="muted">All good.</p>') + '</div>';
+      }, function (err) { if (location.hash !== h0) return; v.innerHTML = '<p class="muted">' + esc(err.message) + '</p>'; });
+    };
+    function launchChecklistApi(d) {
+      var s = db.settings, demo = db.products.filter(SCG.isDemoProduct).length, noPhoto = db.products.filter(function (p) { return !SCG.productImages(p).length; }).length;
+      var items = [
+        [s.phone && s.phone.replace(/\D/g, '') !== '94770000000', 'Enter your real phone number', '#settings'],
+        [s.whatsapp && s.whatsapp !== '94770000000', 'Enter your real WhatsApp number', '#settings'],
+        [!/0000000000/.test(s.bankDetails || '') || !s.payBank, 'Enter real bank details (or turn bank transfer off)', '#settings'],
+        [!(s.globeStats || []).some(function (x) { return x.value === '1,248'; }), 'Replace the sample numbers under the globe', '#homepage'],
+        [!demo, demo + ' demo products are still listed', '#products/'],
+        [!noPhoto, noPhoto + ' products have no real photo yet', '#products/'],
+        [!d.backups || d.backups.ok, 'Backups are running and checked', '#backups'],
+        [!!(d.email && d.email.configured), 'Emails: connect an email provider. Until then customers cannot create an account or reset a password, and no order emails go out (ordering as a guest works)', null, 'Setup needed'],
+        [d.payhere.configured && d.payhere.mode === 'live', 'Card payments: PayHere live account approved and switched on (owner approval needed)', null, 'Owner approval']
+      ];
+      var done = items.filter(function (x) { return x[0]; }).length;
+      if (done === items.length) return '';
+      return '<div class="panel checklist"><div class="head"><h3>Before you go live <small>' + done + ' of ' + items.length + ' done</small></h3></div>' + items.map(function (x) {
+        return '<div class="ck' + (x[0] ? ' ok' : '') + '"><span class="ck-i">' + (x[0] ? '✓' : '!') + '</span><span>' + esc(x[1]) + '</span>' + (x[0] ? '' : x[2] ? '<a class="btn sm" href="' + x[2] + '">Fix</a>' : '<span class="tag">' + esc(x[3]) + '</span>') + '</div>';
+      }).join('') + '</div>';
+    }
+
+    // ---------- orders ----------
+    var of = { status: '', q: '' };
+    VIEWS.orders.render = function (v, arg) {
+      if (arg === 'review') { of.status = 'review'; } else if (arg && ST[arg]) of.status = arg; else if (arg && /^SC-/.test(arg)) { orderModal(arg); }
+      v.innerHTML = '<div class="filters" id="otabs">' + [['', 'All']].concat([['review', '⚠ Needs review']]).concat(Object.keys(ST).map(function (k) { return [k, ST[k]]; })).map(function (t) {
+        return '<button class="chip' + (of.status === t[0] ? ' on' : '') + '" data-st="' + t[0] + '">' + esc(t[1]) + '</button>'; }).join('') + '</div>' +
+        '<div class="panel" style="padding:0"><div style="padding:12px"><input id="oq" type="search" aria-label="Search orders" placeholder="Search order number, name, phone or email" value="' + esc(of.q) + '"></div><div id="olist"><p class="muted" style="padding:12px">Loading…</p></div></div>';
+      function load() {
+        var qs = '?limit=100' + (of.status === 'review' ? '&review=1' : of.status ? '&status=' + of.status : '') + (of.q ? '&q=' + encodeURIComponent(of.q) : '');
+        SCG.api('GET', '/admin/orders' + qs).then(function (r) {
+          $('#olist').innerHTML = r.items.length ? '<div class="table-wrap"><table class="table"><thead><tr><th>Order</th><th>Customer</th><th>Total</th><th>Payment</th><th>Status</th><th>Placed</th></tr></thead><tbody>' + r.items.map(function (o) {
+            return '<tr data-n="' + esc(o.number) + '" style="cursor:pointer"><td><b>' + esc(o.number) + '</b>' + (o.needsReview ? ' <span class="tag warn">review</span>' : '') + '</td><td>' + esc(o.customer.name) + (o.customer.phone ? '<br><small class="muted">' + esc(o.customer.phone) + '</small>' : '') + '</td><td>' + rs(o.total) + '<br><small class="muted">' + o.items + ' item(s)</small></td>' +
+              '<td>' + esc(METHOD[o.paymentMethod]) + '<br><small class="' + (o.paymentStatus === 'paid' || o.paymentStatus === 'cod_collected' ? '' : 'muted') + '">' + esc(PAY[o.paymentStatus] || o.paymentStatus) + '</small></td><td>' + esc(ST[o.status] || o.status) + '</td><td><small>' + when(o.placedAt) + '</small></td></tr>';
+          }).join('') + '</tbody></table></div>' + (r.total > r.items.length ? '<p class="muted" style="padding:10px">Showing ' + r.items.length + ' of ' + r.total + '. Search to narrow down.</p>' : '') : '<p class="empty" style="padding:16px">No orders here.</p>';
+        }, function (err) { $('#olist').innerHTML = '<p class="muted" style="padding:12px">' + esc(err.message) + '</p>'; });
+      }
+      load();
+      $('#otabs').onclick = function (e) { var b = e.target.closest('[data-st]'); if (!b) return; of.status = b.dataset.st; $$('#otabs .chip').forEach(function (x) { x.classList.toggle('on', x === b); }); load(); };
+      var t; $('#oq').oninput = function (e) { clearTimeout(t); t = setTimeout(function () { of.q = e.target.value.trim(); load(); }, 300); };
+      $('#olist').onclick = function (e) { var tr = e.target.closest('tr[data-n]'); if (tr) orderModal(tr.dataset.n, load); };
+    };
+    function orderModal(number, onChange) {
+      openModal('Order ' + number, '<p class="muted">Loading…</p>');
+      SCG.api('GET', '/admin/orders/' + encodeURIComponent(number)).then(function (o) {
+        var next = FLOW[FLOW.indexOf(o.status) + 1], prev = FLOW[FLOW.indexOf(o.status) - 1];
+        var c = o.customer || {};
+        var acts = [];
+        if (can('orders.update') && next) acts.push('<button class="btn primary" data-act="status" data-to="' + next + '">Mark as: ' + esc(ST[next]) + '</button>');
+        if (can('orders.update') && prev && FLOW.indexOf(o.status) > -1) acts.push('<button class="btn" data-act="status" data-to="' + prev + '">Back to: ' + esc(ST[prev]) + '</button>');
+        if (can('payments.verify') && o.paymentMethod === 'bank_transfer' && o.paymentStatus !== 'paid' && (o.status === 'awaiting_bank_transfer' || o.status === 'expired')) acts.push('<button class="btn primary" data-act="bank">Confirm bank transfer received</button>');
+        if (can('payments.verify') && o.paymentMethod === 'cod' && o.paymentStatus === 'cod_pending' && o.status !== 'cancelled') acts.push('<button class="btn" data-act="cod">Cash collected</button>');
+        if (can('orders.update') && FLOW.indexOf(o.status) > -1) acts.push('<button class="btn" data-act="ship">Add / update shipment</button>');
+        if (o.needsReview && can('payments.verify')) acts.push('<button class="btn" data-act="resolve">Mark review as resolved</button>');
+        if (!/cancelled|expired|refunded/.test(o.status)) acts.push('<button class="btn danger" data-act="cancel">' + (o.paymentStatus === 'paid' || o.paymentStatus === 'cod_collected' ? 'Refund / cancel' : 'Cancel order') + '</button>');
+        $('#modalBody').innerHTML =
+          (o.needsReview ? '<div class="co-err">⚠ Needs review: ' + esc(o.reviewReason) + '</div>' : '') +
+          '<div class="grid2"><div><p><b>' + esc(ST[o.status] || o.status) + '</b> · ' + esc(METHOD[o.paymentMethod]) + ' · <b>' + esc(PAY[o.paymentStatus] || o.paymentStatus) + '</b></p>' +
+            (c.phone ? '<p>' + esc(c.name) + '<br><a href="tel:' + esc(c.phone) + '">' + esc(c.phone) + '</a> · <a target="_blank" rel="noopener" href="https://wa.me/' + esc(String(c.phone).replace(/\D/g, '').replace(/^0/, '94')) + '">WhatsApp</a>' + (c.email ? '<br>' + esc(c.email) : '') + '<br>' + esc(c.address) + ', ' + esc(c.city) + ', ' + esc(c.district) + (c.note ? '<br><i>Note: ' + esc(c.note) + '</i>' : '') + '</p>' : '<p class="muted">Customer details hidden (no permission).</p>') +
+          '</div><div>' + o.items.map(function (it) { return '<div class="sum-row"><span>' + esc(it.name) + ' <small class="muted">' + esc(it.variant) + ' ×' + it.qty + ' · ' + esc(it.sku) + '</small></span><span>' + rs(it.lineTotal) + '</span></div>'; }).join('') +
+            '<div class="sum-row"><span>Delivery</span><span>' + rs(o.shipping) + '</span></div>' + (o.discount ? '<div class="sum-row"><span>Discount</span><span>−' + rs(o.discount) + '</span></div>' : '') + '<div class="sum-row total"><span>Total</span><span>' + rs(o.total) + '</span></div></div></div>' +
+          '<div class="filters" style="margin:12px 0">' + acts.join('') + '</div>' +
+          '<h4>Timeline</h4>' + o.timeline.map(function (h) { return '<div class="sum-row"><span>' + esc(ST[h.to_status] || h.to_status) + ' <small class="muted">' + esc(h.actor) + (h.note ? ' — ' + esc(h.note) : '') + '</small></span><small>' + when(h.created_at) + '</small></div>'; }).join('') +
+          (o.payments.length ? '<h4>Payments</h4>' + o.payments.map(function (p) { return '<div class="sum-row"><span>' + esc(METHOD[p.provider] || nice(p.provider)) + ' · ' + esc(PAY[p.status] || nice(p.status)) + (p.provider_payment_id ? ' · PayHere ' + esc(p.provider_payment_id) : '') + (p.card_mask ? ' · ' + esc(p.method || '') + ' ' + esc(p.card_mask) : '') + (p.reference ? ' · ref ' + esc(p.reference) : '') + (p.verified_by ? ' · checked by ' + esc(p.verified_by) : '') + '</span><small>' + rs(p.expected) + '</small></div>'; }).join('') : '') +
+          (o.paymentEvents.length ? '<h4>PayHere notifications</h4>' + o.paymentEvents.map(function (e) { return '<div class="sum-row"><span>status ' + e.status_code + ' · ' + esc(nice(e.result)) + (e.signature_valid ? '' : ' · <b style="color:var(--red)">bad signature</b>') + '</span><small>' + when(e.received_at) + '</small></div>'; }).join('') : '') +
+          (o.shipments.length ? '<h4>Shipments</h4>' + o.shipments.map(function (s) { return '<div class="sum-row"><span>' + esc(s.carrier) + (s.tracking_number ? ' · tracking <b>' + esc(s.tracking_number) + '</b>' : '') + '</span><small>' + esc(SHIP[s.status] || nice(s.status)) + '</small></div>'; }).join('') : '') +
+          (o.refunds.length ? '<h4>Refunds</h4>' + o.refunds.map(function (r) { return '<div class="sum-row"><span>' + esc(r.reason) + ' · by ' + esc(r.username || '') + (r.restock ? ' · restocked' : '') + '</span><span>' + rs(r.amount) + '</span></div>'; }).join('') : '');
+        var done = function (msg) { return function () { toast(msg); closeModal(); if (onChange) onChange(); else route(); SCG.adminState().then(function () { db = SCG.load(); refreshPreview(); }); }; };
+        var post = function (path, body, msg) { return SCG.api('POST', '/admin/orders/' + encodeURIComponent(o.number) + path, body || {}).then(done(msg), fail); };
+        $('#modalBody').onclick = function (e) {
+          var b = e.target.closest('[data-act]'); if (!b) return;
+          var a = b.dataset.act;
+          if (a === 'status') post('/status', { status: b.dataset.to, note: '' }, 'Status: ' + ST[b.dataset.to]);
+          if (a === 'cod') { if (confirm('Record that the courier handed over ' + rs(o.total) + ' cash?')) post('/cod-collected', {}, 'Cash recorded'); }
+          if (a === 'bank') { var ref = prompt('Check your BANK ACCOUNT (not a customer screenshot).\nEnter the bank reference for ' + rs(o.total) + ':'); if (ref) post('/verify-bank-transfer', { reference: ref, confirmChecked: true }, 'Bank transfer confirmed'); }
+          if (a === 'resolve') { var n = prompt('What did you do to resolve it?'); if (n) post('/resolve-review', { note: n }, 'Review resolved'); }
+          if (a === 'ship') {
+            var box = $('#shipBox'); if (box) { box.remove(); return; }   // second click (or Cancel) closes the form
+            var last = o.shipments[o.shipments.length - 1] || {}, cur = SHIP[last.status] ? last.status : 'shipped_abroad';
+            $('#modalBody .filters').insertAdjacentHTML('afterend', '<form class="form ship-box" id="shipBox">' +
+              '<label>Courier<input name="carrier" required maxlength="60" list="shipCarriers" placeholder="e.g. Domex, Pronto, DHL" value="' + esc(last.carrier || '') + '"><datalist id="shipCarriers"><option value="Domex"><option value="Pronto"><option value="Koombiyo"><option value="DHL"><option value="Sri Lanka Post"></datalist></label>' +
+              '<label>Tracking number<input name="trk" maxlength="80" placeholder="Optional" value="' + esc(last.tracking_number || '') + '"></label>' +
+              '<label class="full">Where is the parcel now?<select name="st">' + Object.keys(SHIP).map(function (k) { return '<option value="' + k + '"' + (k === cur ? ' selected' : '') + '>' + esc(SHIP[k]) + '</option>'; }).join('') + '</select></label>' +
+              '<div class="form-foot"><button type="button" class="btn" data-act="ship">Cancel</button><button class="btn primary">Save shipment</button></div></form>');
+            var sf = $('#shipBox');
+            sf.onsubmit = function (ev) { ev.preventDefault(); var cr = sf.carrier.value.trim(); if (!cr) { sf.carrier.focus(); return; }
+              post('/shipments', { carrier: cr, trackingNumber: sf.trk.value.trim(), status: sf.st.value }, 'Shipment saved'); };
+            sf.carrier.focus();
+          }
+          if (a === 'cancel') {
+            var reason = prompt('Reason for cancelling:'); if (!reason) return;
+            var paid = o.paymentStatus === 'paid' || o.paymentStatus === 'cod_collected', body = { reason: reason };
+            if (paid) {
+              if (!can('refunds.create')) { toast('This order is paid. Ask finance or the owner to record the refund.'); return; }
+              var amt = prompt('Refund amount (you must actually pay this back to the customer):', String(o.total)); if (!amt) return;
+              var amtN = +String(amt).replace(/rs\.?|,|\s/gi, '');
+              if (!(amtN > 0)) { toast('Type the refund amount as a number, for example 3150'); return; }
+              body.refund = { amount: amtN, restock: confirm('Put the items back into stock?') };
+            }
+            post('/cancel', body, paid ? 'Refund recorded' : 'Order cancelled');
+          }
+        };
+      }, function (err) { $('#modalBody').innerHTML = '<p>' + esc(err.message) + '</p>'; });
+    }
+    var _updatePill = updatePill;
+    updatePill = function () {
+      var el = $('#orderPill'); if (!el || !can('orders.read')) return;
+      SCG.api('GET', '/admin/orders?status=confirmed&limit=1').then(function (r) { el.textContent = r.total || ''; }, function () {});
+    };
+
+    // ---------- customers ----------
+    VIEWS.customers.render = function (v) {
+      v.innerHTML = '<div class="panel" style="padding:0"><div style="padding:12px"><input id="cq" type="search" aria-label="Search customers" placeholder="Search name, phone or email"></div><div id="clist"><p class="muted" style="padding:12px">Loading…</p></div></div>';
+      function load(q) {
+        SCG.api('GET', '/admin/customers' + (q ? '?q=' + encodeURIComponent(q) : '')).then(function (list) {
+          $('#clist').innerHTML = list.length ? '<div class="table-wrap"><table class="table"><thead><tr><th>Customer</th><th>Phone</th><th>Account</th><th>Orders</th><th>Paid</th><th>Last order</th></tr></thead><tbody>' + list.map(function (c) {
+            return '<tr><td><b>' + esc(c.name) + '</b>' + (c.email ? '<br><small class="muted">' + esc(c.email) + '</small>' : '') + '</td><td>' + esc(c.phone) + '</td><td>' + (c.account ? (c.verified ? 'Verified' : 'Not verified') : 'Guest') + '</td><td>' + c.orders + '</td><td>' + rs(c.spent) + '</td><td><small>' + when(c.last_order) + '</small></td></tr>';
+          }).join('') + '</tbody></table></div>' : '<p class="empty" style="padding:16px">No customers yet.</p>';
+        }, function (err) { $('#clist').innerHTML = '<p class="muted" style="padding:12px">' + esc(err.message) + '</p>'; });
+      }
+      load(''); var t; $('#cq').oninput = function (e) { clearTimeout(t); t = setTimeout(function () { load(e.target.value.trim()); accounts(e.target.value.trim()); }, 300); };
+      // registered accounts (also those who have not ordered yet); no email is sent, so a forgotten password is set here
+      v.insertAdjacentHTML('beforeend', '<div class="panel" style="padding:0;margin-top:14px"><h3 style="padding:14px 16px 0;margin:0">Registered accounts</h3><div id="alist"><p class="muted" style="padding:12px">Loading…</p></div></div>');
+      function accounts(q) {
+        SCG.api('GET', '/admin/customer-accounts' + (q ? '?q=' + encodeURIComponent(q) : '')).then(function (list) {
+          $('#alist').innerHTML = list.length ? '<div class="table-wrap"><table class="table"><thead><tr><th>Customer</th><th>Phones</th><th>Address</th><th>Orders</th><th>Joined</th>' + (can('customers.write') ? '<th></th>' : '') + '</tr></thead><tbody>' + list.map(function (c) {
+            return '<tr><td><div class="cust-cell">' + (c.avatarUrl ? '<img class="cust-ph" src="' + esc(c.avatarUrl) + '" alt="">' : '<span class="cust-ph">' + esc(String(c.name || '?').charAt(0).toUpperCase()) + '</span>') + '<div><b>' + esc(c.name) + '</b><br><small class="muted">' + esc(c.email || '') + '</small></div></div></td>' +
+              '<td>' + esc(c.phone || '') + (c.phone2 ? '<br><small class="muted">' + esc(c.phone2) + '</small>' : '') + '</td><td><small>' + esc(c.address || '') + '</small></td><td>' + c.orders + '</td><td><small>' + new Date(c.createdAt).toLocaleDateString() + '</small></td>' +
+              (can('customers.write') ? '<td><button class="btn sm" data-cpw="' + esc(c.id) + '" data-cname="' + esc(c.name) + '">Set new password</button></td>' : '') + '</tr>';
+          }).join('') + '</tbody></table></div>' : '<p class="empty" style="padding:16px">No registered accounts yet.</p>';
+        }, function (err) { $('#alist').innerHTML = '<p class="muted" style="padding:12px">' + esc(err.message) + '</p>'; });
+      }
+      accounts('');
+      $('#alist').onclick = function (e) {
+        var b = e.target.closest('[data-cpw]'); if (!b) return;
+        openModal('New password — ' + b.dataset.cname, '<form class="form" id="cpwF"><p class="full muted" style="margin:0;font-size:13px">Use this when the customer forgot their password. Check it is really them first (call the phone number on the account). Tell them the new password yourself; they can sign in with it straight away.</p>' +
+          '<label class="full">New password (8+ characters)<input name="pw" required minlength="8" maxlength="72" autocomplete="off"></label><div class="form-foot"><button class="btn primary">Save password</button></div></form>');
+        $('#cpwF').onsubmit = function (ev) { ev.preventDefault();
+          SCG.api('POST', '/admin/customers/' + b.dataset.cpw + '/password', { password: ev.target.elements.pw.value }).then(function () { toast('New password saved'); closeModal(); }, fail); };
+      };
+    };
+
+    // ---------- settings: server password + data panel ----------
+    var _settings = VIEWS.settings.render;
+    VIEWS.settings.render = function (v) {
+      _settings(v);
+      var d = $('#dform .full[style*="flex-wrap"]');
+      if (d) {
+        d.insertAdjacentHTML('beforeend', sw('payOnline', !!db.settings.payOnline, 'Card payment (PayHere) at checkout'));
+        $('#dform').addEventListener('submit', function (e) { var c = e.target.elements.payOnline; if (c) db.settings.payOnline = c.checked; }, true);
+      }
+      var a = $('#aform');
+      if (a) {
+        a.outerHTML = '<form class="panel" id="aform"><h3>My password</h3><p class="muted" style="margin-top:0">Signed in as <b>' + esc(me ? me.username : '') + '</b>. Staff accounts are managed in <a href="#staff" style="color:var(--red)">Staff &amp; Roles</a>.</p><div class="form">' +
+          '<label>Current password<input name="cur" type="password" required autocomplete="current-password"></label><label>New password (12+ characters)<input name="pw" type="password" required minlength="12" autocomplete="new-password"></label>' +
+          '<div class="form-foot"><button class="btn dark">Change password</button></div></div></form>';
+        $('#aform').onsubmit = function (e) { e.preventDefault(); var E = e.target.elements; SCG.api('POST', '/admin/auth/password', { currentPassword: E.cur.value, newPassword: E.pw.value }).then(function () { toast('Password changed. Other devices were signed out.'); e.target.reset(); }, fail); };
+      }
+      var exp = $('#exp'); var bp = exp && exp.closest('.panel');
+      if (bp) {
+        bp.innerHTML = '<h3>Data &amp; backups</h3><p class="muted" style="margin-top:0">Everything is saved in the online database and backed up automatically. See <a href="#backups" style="color:var(--red)">Backups</a> for the latest status.</p>' +
+          '<div class="filters"><button class="btn" id="exp2">⬇ Download catalogue (JSON)</button>' + (can('catalog.write') ? '<button class="btn danger" id="rmDemo2">Hide all demo products</button>' : '') + '</div>';
+        $('#exp2').onclick = function () { var blob = new Blob([JSON.stringify({ exported: new Date().toISOString(), categories: db.categories, collections: db.collections, hero: db.hero, products: db.products }, null, 1)], { type: 'application/json' }); var u = URL.createObjectURL(blob), l = document.createElement('a'); l.href = u; l.download = 'source-connect-catalogue.json'; l.click(); setTimeout(function () { URL.revokeObjectURL(u); }, 1000); };
+        var rm = $('#rmDemo2'); if (rm) rm.onclick = function () {
+          var n = db.products.filter(SCG.isDemoProduct).length; if (!n) { toast('No demo products left'); return; }
+          if (!confirm('Hide the ' + n + ' demo products from the website? They are archived, not deleted.')) return;
+          db.products = db.products.filter(function (p) { return !SCG.isDemoProduct(p); }); commit(n + ' demo products hidden'); route();
+        };
+      }
+    };
+
+    // ---------- staff & roles ----------
+    VIEWS.staff = { title: 'Staff & Roles', sub: 'Who can sign in and what each person may do', render: function (v) {
+      setActions('<button class="btn primary" id="addStaff">+ Add staff</button>');
+      v.innerHTML = '<p class="muted">Loading…</p>';
+      var h0 = location.hash;   // draw only if the person is still on this page
+      Promise.all([SCG.api('GET', '/admin/staff'), SCG.api('GET', '/admin/sign-in'), SCG.api('GET', '/admin/access')]).then(function (both) { if (location.hash !== h0) return;
+        var r = both[0], si = both[1], withPin = si.withPin || [], ac = both[2];
+        var pend = ac.requests.filter(function (q) { return q.status === 'pending'; });
+        var reqHTML = '<div class="panel" id="acReq"><h3>Access requests <small>' + (pend.length ? pend.length + ' waiting' : 'nothing waiting') + '</small></h3>' +
+          (pend.length ? pend.map(function (q) { return '<div class="sum-row"><span><b>' + esc(q.name) + '</b> <small class="muted">' + esc(q.username) + '</small> asks for <b>' + esc(permName(q.permission, q.description)) + '</b>' +
+            (q.note ? '<br><small class="muted">“' + esc(q.note) + '”</small>' : '') + '</span><span style="white-space:nowrap"><button class="btn sm primary" data-acc="' + q.id + '">Approve</button> <button class="btn sm danger" data-rej="' + q.id + '">Decline</button></span></div>'; }).join('')
+            : '<p class="muted" style="margin:0">When a co-admin asks for more access, it appears here for you to approve or decline.</p>') + '</div>';
+        var pc = $('#acPill'); if (pc) pc.textContent = pend.length ? String(pend.length) : '';
+        var shops = (db.shops || []).map(function (s) { return s.id; });
+        var stepOf = function (u) { return u.second_step || si.secondStep; };   // the person's own choice, else the shop default
+        var stepRadios = function (sel) { return '<div class="full"><b>Verify with</b> <small class="muted">(asked after the password)</small><br>' +
+          '<label class="chk"><input type="radio" name="step" value="pin"' + (sel === 'pin' ? ' checked' : '') + '> PIN</label> ' +
+          '<label class="chk"><input type="radio" name="step" value="totp"' + (sel === 'totp' ? ' checked' : '') + '> Authenticator app</label></div>'; };
+        v.innerHTML = reqHTML + '<div class="panel" style="padding:0"><div class="table-wrap"><table class="table"><thead><tr><th>Name</th><th>Roles</th><th>Departments</th><th>Status</th><th>Last sign-in</th><th></th></tr></thead><tbody>' + r.staff.map(function (u) {
+          var ex = ac.extra[u.id] || [];
+          return '<tr><td><b>' + esc(u.display_name) + '</b><br><small class="muted">' + esc(u.username) + ' · ' + (stepOf(u) === 'pin' ? 'PIN' : 'Authenticator') + '</small></td><td>' + u.roles.map(esc).join(', ') + (ex.length ? '<br><small class="muted">+ approved: ' + ex.map(function (c) { return esc(permName(c)); }).join(', ') + '</small>' : '') + '</td><td>' + (u.shops.length ? u.shops.map(esc).join(', ') : 'All') + '</td><td>' + esc(u.status) + (u.locked_until && new Date(u.locked_until) > new Date() ? ' · locked' : '') + (u.must_change_password ? ' · temp password' : '') + '</td><td><small>' + when(u.last_login_at) + '</small></td>' +
+            '<td style="white-space:nowrap"><button class="btn sm" data-edit="' + u.id + '">Edit</button> <button class="btn sm" data-pin="' + u.id + '">' + (withPin.indexOf(u.id) > -1 ? 'Change PIN' : 'Set PIN') + '</button></td></tr>';
+        }).join('') + '</tbody></table></div></div>' +
+        '<div class="panel"><h3>Second sign-in step <small>asked after the password</small></h3><form class="form" id="siF">' +
+          '<label class="full chk"><input type="radio" name="mode" value="totp"' + (si.secondStep === 'totp' ? ' checked' : '') + '> <b>Authenticator app</b> (6-digit code on the phone) — the safest</label>' +
+          '<label class="full chk"><input type="radio" name="mode" value="pin"' + (si.secondStep === 'pin' ? ' checked' : '') + '> <b>Admin PIN</b> (4–8 digits you set for each person with “Set PIN”). 5 wrong tries lock it for 15 minutes.</label>' +
+          '<p class="full muted" style="margin:0;font-size:13px">Set your own PIN before choosing “Admin PIN”. Staff without a PIN cannot sign in while PIN is chosen. Switch back to the authenticator app before going live.</p>' +
+          '<div class="form-foot"><button class="btn primary">Save</button></div></form></div>' +
+        '<div class="panel"><h3>Roles</h3>' + r.roles.map(function (ro) { return '<p><b>' + esc(ro.name) + '</b> <small class="muted">(' + esc(ro.code) + ')</small> — ' + esc(ro.description) + '<br><small class="muted">' + ro.permissions.map(esc).join(', ') + '</small></p>'; }).join('') + '</div>';
+        var roleBoxes = function (sel) { return r.roles.map(function (ro) { return '<label class="chk"><input type="checkbox" name="role" value="' + esc(ro.code) + '"' + (sel.indexOf(ro.code) > -1 ? ' checked' : '') + '> ' + esc(ro.name) + '</label>'; }).join(''); };
+        var shopBoxes = function (sel) { return shops.map(function (s) { return '<label class="chk"><input type="checkbox" name="shop" value="' + esc(s) + '"' + (sel.indexOf(s) > -1 ? ' checked' : '') + '> ' + esc(s) + '</label>'; }).join(''); };
+        var vals = function (f, n) { return $$('input[name=' + n + ']:checked', f).map(function (x) { return x.value; }); };
+        $('#addStaff').onclick = function () {
+          var roleOpts = r.roles.map(function (ro) { return '<option value="' + esc(ro.code) + '"' + (ro.code === 'co_admin' ? ' selected' : '') + '>' + esc(ro.name) + '</option>'; }).join('');
+          var pinIn = function (n) { return '<input name="' + n + '" type="password" inputmode="numeric" pattern="[0-9]{4,8}" maxlength="8" autocomplete="new-password">'; };
+          openModal('Add staff', '<form class="form" id="stf">' +
+            '<label class="full">Full name <small class="muted">(who uses this account)</small><input name="displayName" required maxlength="80"></label>' +
+            '<label>Username <small class="muted">(to sign in)</small><input name="username" required pattern="[A-Za-z0-9._\\-]{3,40}" title="3 to 40 letters, numbers, . _ -" autocomplete="off" autocapitalize="none" spellcheck="false"></label>' +
+            '<label>Password <small class="muted">(12+ letters and numbers)</small><input name="pw" required minlength="12" autocomplete="new-password"></label>' +
+            '<label class="full">Role<select name="role">' + roleOpts + '</select></label>' +
+            '<div class="full" id="depBox" style="display:none"><b>Departments</b><br>' + shopBoxes([]) + '</div>' +
+            stepRadios(si.secondStep) +
+            '<label class="pinF">PIN <small class="muted">(4–8 digits)</small>' + pinIn('pin') + '</label><label class="pinF">PIN again <small class="muted">(the same)</small>' + pinIn('pin2') + '</label>' +
+            '<div class="form-foot"><button class="btn primary">Create</button></div></form>');
+          var F = $('#stf'), E0 = F.elements;
+          var sync = function () {
+            var ro = r.roles.filter(function (x) { return x.code === E0.role.value; })[0];
+            $('#depBox').style.display = ro && ro.shop_scoped ? '' : 'none';
+            var pin = (F.querySelector('input[name=step]:checked') || {}).value === 'pin';
+            $$('.pinF', F).forEach(function (l) { l.style.display = pin ? '' : 'none'; l.querySelector('input').required = pin; });
+          };
+          F.onchange = sync; sync();
+          F.onsubmit = function (e) { e.preventDefault(); var E = e.target.elements;
+            var step = (F.querySelector('input[name=step]:checked') || {}).value;
+            if (!step) { toast('Choose PIN or authenticator app'); return; }
+            if (step === 'pin' && E.pin.value !== E.pin2.value) { toast('The two PINs are not the same'); return; }
+            var ro = r.roles.filter(function (x) { return x.code === E.role.value; })[0];
+            var body = { username: E.username.value.trim(), displayName: E.displayName.value.trim(), email: '', roles: [E.role.value], shops: ro && ro.shop_scoped ? vals(F, 'shop') : [], temporaryPassword: E.pw.value, secondStep: step };
+            if (step === 'pin') body.pin = E.pin.value;
+            SCG.api('POST', '/admin/staff', body)
+              .then(function () { toast('Staff account created. Sign in with the username ' + body.username); closeModal(); route(); }, fail); };
+        };
+        $('#siF').onsubmit = function (e) { e.preventDefault(); var mode = (e.target.querySelector('input[name=mode]:checked') || {}).value;
+          SCG.api('PUT', '/admin/sign-in', { secondStep: mode }).then(function () { toast(mode === 'pin' ? 'Staff now sign in with password + PIN' : 'Staff now sign in with password + authenticator app'); route(); }, fail); };
+        v.onclick = function (e) {
+          var ab = e.target.closest('[data-acc],[data-rej]');
+          if (ab) {
+            var yes = ab.hasAttribute('data-acc'), id = ab.dataset.acc || ab.dataset.rej;
+            var note = prompt(yes ? 'Approve. A note for the person (optional):' : 'Decline. Tell them why (optional):', ''); if (note === null) return;
+            SCG.api('POST', '/admin/access/requests/' + id, { approve: yes, note: note.slice(0, 300) }).then(function () { toast(yes ? 'Approved' : 'Declined'); route(); }, fail);
+            return;
+          }
+          var pb = e.target.closest('[data-pin]');
+          if (pb) {
+            var pu = r.staff.filter(function (x) { return x.id === pb.dataset.pin; })[0], has = withPin.indexOf(pu.id) > -1;
+            openModal((has ? 'Change PIN — ' : 'Set PIN — ') + pu.username, '<form class="form" id="pinF"><label class="full">New PIN (4–8 digits)<input name="pin" type="password" inputmode="numeric" pattern="[0-9]{4,8}" maxlength="8" required autocomplete="new-password"></label>' +
+              '<label class="full">Type it again<input name="pin2" type="password" inputmode="numeric" pattern="[0-9]{4,8}" maxlength="8" required autocomplete="new-password"></label>' +
+              '<p class="full muted" style="margin:0;font-size:13px">Give the PIN to the person yourself. It is stored only in scrambled (hashed) form, so nobody can read it back.</p>' +
+              '<div class="form-foot">' + (has ? '<button type="button" class="btn danger" id="pinDel">Remove PIN</button>' : '') + '<button class="btn primary">Save PIN</button></div></form>');
+            $('#pinF').onsubmit = function (ev) { ev.preventDefault(); var E = ev.target.elements;
+              if (E.pin.value !== E.pin2.value) { toast('The two PINs are not the same'); return; }
+              SCG.api('PUT', '/admin/staff/' + pu.id + '/pin', { pin: E.pin.value }).then(function () { toast('PIN saved'); closeModal(); route(); }, fail); };
+            if (has) $('#pinDel').onclick = function () { if (!confirm('Remove the PIN of ' + pu.username + '?')) return;
+              SCG.api('PUT', '/admin/staff/' + pu.id + '/pin', { pin: null }).then(function () { toast('PIN removed'); closeModal(); route(); }, fail); };
+            return;
+          }
+          var b = e.target.closest('[data-edit]'); if (!b) return;
+          var u = r.staff.filter(function (x) { return x.id === b.dataset.edit; })[0];
+          var isMe = String(u.username).toLowerCase() === String(me.username || '').toLowerCase();
+          openModal('Edit ' + u.username, '<form class="form" id="stf"><label class="full">Full name<input name="displayName" required value="' + esc(u.display_name) + '"></label>' +
+            '<label class="full">Username <small class="muted">(' + (u.email ? 'signs in with the email ' + esc(u.email) : 'used to sign in') + ')</small><input name="username" required pattern="[A-Za-z0-9._\\-]{3,40}" title="3 to 40 letters, numbers, . _ -" autocomplete="off" autocapitalize="none" spellcheck="false" value="' + esc(u.username) + '"></label><div class="full"><b>Roles</b><br>' + roleBoxes(u.roles) + '</div><div class="full"><b>Departments</b><br>' + shopBoxes(u.shops) + '</div>' +
+            stepRadios(stepOf(u)) +
+            '<label>Status<select name="status"><option value="active"' + (u.status === 'active' ? ' selected' : '') + '>Active</option><option value="disabled"' + (u.status === 'disabled' ? ' selected' : '') + '>Disabled (cannot sign in)</option></select></label>' +
+            '<label>Reset password (optional, 12+)<input name="pw" minlength="12" placeholder="Leave blank to keep"></label><label class="chk full"><input type="checkbox" name="unlock"> Unlock after too many wrong passwords</label>' +
+            '<div class="full"><b>Extra access</b> <small class="muted">(on top of the roles; only you, the main admin, can give it)</small><br>' + ac.permissions.map(function (p) {
+              var viaRole = r.roles.some(function (ro) { return u.roles.indexOf(ro.code) > -1 && (ro.permissions || []).indexOf(p.code) > -1; });
+              return viaRole ? '' : '<label class="chk"><input type="checkbox" name="extra" value="' + esc(p.code) + '"' + ((ac.extra[u.id] || []).indexOf(p.code) > -1 ? ' checked' : '') + '> ' + esc(permName(p.code, p.description)) + '</label>'; }).join('') + '</div>' +
+            (isMe ? '' : '<div class="full ship-box" style="margin:0"><b>Delete this account</b><p class="muted" style="margin:4px 0 10px;font-size:13px">' + esc(u.display_name) + ' will not be able to sign in again. Orders, stock history and the audit log are kept.</p><button type="button" class="btn danger" id="stDel">Delete account</button></div>') +
+            '<div class="form-foot"><button class="btn primary">Save</button></div></form>');
+          $('#stf').onsubmit = function (ev) { ev.preventDefault(); var E = ev.target.elements, newName = E.username.value.trim(), body = { displayName: E.displayName.value.trim(), roles: vals(ev.target, 'role'), shops: vals(ev.target, 'shop'), status: E.status.value, unlock: E.unlock.checked };
+            if (E.pw.value) body.resetPassword = E.pw.value;
+            var renamed = newName !== String(u.username);
+            if (renamed) body.username = newName;
+            var st = (ev.target.querySelector('input[name=step]:checked') || {}).value;
+            if (st && st !== stepOf(u)) body.secondStep = st;
+            var needPin = st === 'pin' && withPin.indexOf(u.id) < 0;
+            var extra = vals(ev.target, 'extra');   // (Delete is a separate button below)
+            SCG.api('PUT', '/admin/staff/' + u.id, body).then(function () { return SCG.api('PUT', '/admin/staff/' + u.id + '/access', { permissions: extra }); })
+              .then(function () {
+                if (renamed && isMe) { toast('Saved. Your username is now ' + newName); setTimeout(function () { location.reload(); }, 900); return; }
+                toast(needPin ? 'Saved. Now give ' + newName + ' a PIN with “Set PIN”.' : renamed && !u.email ? 'Saved. ' + u.display_name + ' now signs in with ' + newName : 'Saved'); closeModal(); route(); }, fail); };
+          var del = $('#stDel');
+          if (del) del.onclick = function () {
+            var typed = prompt('This cannot be undone. Type the username  ' + u.username + '  to delete the account:', '');
+            if (typed === null) return;
+            if (typed.trim().toLowerCase() !== String(u.username).toLowerCase()) { toast('The username did not match. Nothing was deleted.'); return; }
+            SCG.api('DELETE', '/admin/staff/' + u.id).then(function () { toast('Account deleted'); closeModal(); route(); }, fail);
+          };
+        };
+      }, function (err) { if (location.hash !== h0) return; v.innerHTML = '<p class="muted">' + esc(err.message) + '</p>'; });
+    } };
+
+    // ---------- audit log ----------
+    VIEWS.audit = { title: 'Audit Log', sub: 'Every sign-in, change and payment event, newest first', render: function (v) {
+      v.innerHTML = '<p class="muted">Loading…</p>';
+      var h0 = location.hash;   // draw only if the person is still on this page
+      SCG.api('GET', '/admin/audit?limit=200').then(function (rows) { if (location.hash !== h0) return;
+        v.innerHTML = '<div class="panel" style="padding:0"><div class="table-wrap"><table class="table"><thead><tr><th>When</th><th>Who</th><th>What</th><th>Item</th><th>IP</th></tr></thead><tbody>' + rows.map(function (r) {
+          return '<tr><td><small>' + when(r.created_at) + '</small></td><td>' + esc(r.actor_label || r.actor_type) + '</td><td>' + esc(r.action) + '</td><td><small>' + esc(r.entity_type || '') + ' ' + esc(r.entity_id || '') + '</small></td><td><small>' + esc(r.ip || '') + '</small></td></tr>';
+        }).join('') + '</tbody></table></div></div>';
+      }, function (err) { if (location.hash !== h0) return; v.innerHTML = '<p class="muted">' + esc(err.message) + '</p>'; });
+    } };
+
+    // ---------- backups (read-only) ----------
+    VIEWS.backups = { title: 'Backups', sub: 'Automatic database backups (read-only status)', render: function (v) {
+      v.innerHTML = '<p class="muted">Loading…</p>';
+      var h0 = location.hash;   // draw only if the person is still on this page
+      SCG.api('GET', '/admin/backups').then(function (b) { if (location.hash !== h0) return;
+        v.innerHTML = '<div class="panel checklist"><div class="ck' + (b.ok ? ' ok' : '') + '"><span class="ck-i">' + (b.ok ? '✓' : '!') + '</span><span>' + (b.ok ? 'Backups look healthy. Last successful backup: ' + when(b.lastSuccessfulBackupAt) : esc(b.problems.join(' '))) + '</span></div></div>' +
+          '<div class="panel" style="padding:0"><div class="table-wrap"><table class="table"><thead><tr><th>Job</th><th>Result</th><th>Started</th><th>Finished</th><th>Details</th></tr></thead><tbody>' + (b.recent.length ? b.recent.map(function (r) {
+            return '<tr><td>' + esc(r.kind) + '</td><td>' + (r.status === 'ok' ? '✓ ok' : r.status === 'failed' ? '<b style="color:var(--red)">failed</b>' : esc(r.status)) + '</td><td><small>' + when(r.started_at) + '</small></td><td><small>' + when(r.finished_at) + '</small></td><td><small>' + esc(JSON.stringify(r.detail || {})).slice(0, 160) + '</small></td></tr>';
+          }).join('') : '<tr><td colspan="5" class="muted">No backup has reported in yet.</td></tr>') + '</tbody></table></div></div>' +
+          '<p class="muted" style="font-size:13px">Restores are done by the system administrator following the restore runbook (never from this page), so a stolen admin password cannot overwrite the shop’s data.</p>';
+      }, function (err) { if (location.hash !== h0) return; v.innerHTML = '<p class="muted">' + esc(err.message) + '</p>'; });
+    } };
+
+    // ---------- promo codes ----------
+    VIEWS.coupons = { title: 'Promo Codes', sub: 'Discount codes customers type at checkout', render: function (v) {
+      setActions('<button class="btn primary" id="addCp">+ New code</button>');
+      v.innerHTML = '<p class="muted">Loading…</p>';
+      var h0 = location.hash;   // draw only if the person is still on this page
+      SCG.api('GET', '/admin/coupons').then(function (list) { if (location.hash !== h0) return;
+        v.innerHTML = '<div class="panel" style="padding:0"><div class="table-wrap"><table class="table"><thead><tr><th>Code</th><th>Discount</th><th>Min. order</th><th>Used</th><th>Valid</th><th>Active</th></tr></thead><tbody>' + (list.length ? list.map(function (c) {
+          return '<tr><td><b>' + esc(c.code) + '</b></td><td>' + (c.kind === 'percent' ? c.value + '%' : rs(c.value)) + '</td><td>' + rs(c.min_subtotal) + '</td><td>' + c.used + (c.max_redemptions ? ' / ' + c.max_redemptions : '') + '</td><td><small>' + (c.starts_at ? when(c.starts_at) : 'now') + ' → ' + (c.ends_at ? when(c.ends_at) : 'no end') + '</small></td>' +
+            '<td><label class="switch"><input type="checkbox" data-cp="' + c.id + '"' + (c.active ? ' checked' : '') + ' aria-label="Promo code ' + esc(c.code) + ' is active"><i></i></label></td></tr>'; }).join('') : '<tr><td colspan="6" class="muted">No promo codes yet.</td></tr>') + '</tbody></table></div></div>';
+        v.onchange = function (e) { var c = e.target.closest('[data-cp]'); if (c) SCG.api('PUT', '/admin/coupons/' + c.dataset.cp, { active: c.checked }).then(function () { toast('Saved'); }, fail); };
+        $('#addCp').onclick = function () {
+          openModal('New promo code', '<form class="form" id="cpf"><label>Code<input name="code" required pattern="[A-Za-z0-9_\\-]{3,30}" placeholder="e.g. NEWYEAR10"></label><label>Type<select name="kind"><option value="percent">% off</option><option value="fixed">Fixed amount off</option></select></label>' +
+            '<label>Value<input name="value" type="number" min="1" required></label><label>Minimum order (Rs.)<input name="min" type="number" min="0" value="0"></label><label>Max uses (optional)<input name="max" type="number" min="1"></label><label>Ends (optional)<input name="ends" type="datetime-local"></label>' +
+            '<div class="form-foot"><button class="btn primary">Create</button></div></form>');
+          $('#cpf').onsubmit = function (e) { e.preventDefault(); var E = e.target.elements, body = { code: E.code.value.trim(), kind: E.kind.value, value: +E.value.value, minSubtotal: +E.min.value || 0 };
+            if (E.max.value) body.maxRedemptions = +E.max.value; if (E.ends.value) body.endsAt = new Date(E.ends.value).toISOString();
+            SCG.api('POST', '/admin/coupons', body).then(function () { toast('Promo code created'); closeModal(); route(); }, fail); };
+        };
+      }, function (err) { if (location.hash !== h0) return; v.innerHTML = '<p class="muted">' + esc(err.message) + '</p>'; });
+    } };
+
+    VIEWS.renewals = { title: 'Renewals', sub: 'Get a warning before a paid service renews or a free trial ends (Sri Lanka dates)', render: function (v) {
+      setActions('<button class="btn primary" id="addRn">+ Add reminder</button>');
+      v.innerHTML = '<p class="muted">Loading…</p>';
+      var h0 = location.hash, items = [];
+      var CYC = { monthly: 'Every month', yearly: 'Every year', once: 'One time (trial end)' };
+      var ST = { due_soon: '<span class="rn-st soon">Due soon</span>', overdue: '<span class="rn-st late">Overdue</span>', ok: '<span class="rn-st ok">OK</span>', off: '<span class="rn-st off">Off</span>' };
+      function form(r) {
+        r = r || { name: '', provider: '', dueOn: '', cycle: 'monthly', remindDays: 1, note: '', active: true };
+        openModal(r.id ? 'Edit reminder' : 'New reminder', '<form class="form" id="rnf">' +
+          '<label>Name<input name="name" required maxlength="60" list="rnNames" value="' + esc(r.name) + '" placeholder="e.g. Supabase Pro"></label>' +
+          '<datalist id="rnNames"><option value="Supabase Pro"><option value="Cloudflare"><option value="VPS server"><option value="Domain name"><option value="Email service"></datalist>' +
+          '<label>Company / provider (optional)<input name="provider" maxlength="60" value="' + esc(r.provider) + '" placeholder="e.g. Supabase"></label>' +
+          '<label>' + (r.id && r.cycle !== 'once' ? 'First renewal date (later dates follow from it)' : 'Renewal / end date') + '<input name="due" type="date" required value="' + esc(r.id ? r.firstDue : r.dueOn) + '"></label>' +
+          '<label>Repeats<select name="cycle">' + Object.keys(CYC).map(function (k) { return '<option value="' + k + '"' + (r.cycle === k ? ' selected' : '') + '>' + CYC[k] + '</option>'; }).join('') + '</select></label>' +
+          '<label>Warn me this many days before<input name="remind" type="number" min="0" max="30" required value="' + r.remindDays + '"></label>' +
+          '<label>Note (optional)<input name="note" maxlength="200" value="' + esc(r.note) + '" placeholder="e.g. paid with the business card"></label>' +
+          '<label class="chk"><input type="checkbox" name="active"' + (r.active ? ' checked' : '') + '> Warnings on</label>' +
+          '<div class="form-foot">' + (r.id ? '<button type="button" class="btn danger" id="rnDel">Delete</button>' : '') + '<button class="btn primary">Save</button></div></form>');
+        $('#rnf').onsubmit = function (e) { e.preventDefault(); var E = e.target.elements;
+          var body = { name: E.name.value.trim(), provider: E.provider.value.trim(), dueOn: E.due.value, cycle: E.cycle.value, remindDays: +E.remind.value, note: E.note.value.trim(), active: E.active.checked };
+          SCG.api(r.id ? 'PUT' : 'POST', '/admin/renewals' + (r.id ? '/' + r.id : ''), body).then(function () { toast('Saved'); closeModal(); route(); checkRenewals(); }, fail); };
+        if (r.id) $('#rnDel').onclick = function () { if (!confirm('Delete the reminder "' + r.name + '"?')) return;
+          SCG.api('DELETE', '/admin/renewals/' + r.id).then(function () { toast('Deleted'); closeModal(); route(); checkRenewals(); }, fail); };
+      }
+      $('#addRn').onclick = function () { form(); };
+      SCG.api('GET', '/admin/renewals').then(function (d) { if (location.hash !== h0) return;
+        items = d.items;
+        v.innerHTML = '<div class="panel" style="padding:0"><div class="table-wrap"><table class="table"><thead><tr><th>Service</th><th>Next date</th><th>When</th><th>Repeats</th><th>Warn</th><th>Status</th><th></th></tr></thead><tbody>' +
+          (items.length ? items.map(function (r, i) {
+            return '<tr><td><b>' + esc(r.name) + '</b>' + (r.provider ? '<br><small class="muted">' + esc(r.provider) + '</small>' : '') + (r.note ? '<br><small class="muted">' + esc(r.note) + '</small>' : '') + '</td>' +
+              '<td>' + rnDate(r.dueOn) + '</td><td>' + rnWhen(r.daysLeft) + '</td><td>' + CYC[r.cycle] + '</td><td>' + (r.remindDays ? r.remindDays + ' day' + (r.remindDays > 1 ? 's' : '') + ' before' : 'on the day') + '</td>' +
+              '<td>' + ST[r.status] + '</td><td><button class="btn sm" data-rn="' + i + '">Edit</button></td></tr>';
+          }).join('') : '<tr><td colspan="7" class="muted">No reminders yet. Add one for each paid service: Supabase Pro, VPS, domain, …</td></tr>') + '</tbody></table></div></div>' +
+          '<p class="muted" style="font-size:13px">Today in Sri Lanka: ' + rnDate(d.today) + '. Monthly and yearly dates move on by themselves after they pass. A one-time date (for example a free trial) stays “Overdue” until you change or delete it. ' +
+          'The warning shows at the top of every admin page and on this menu item.</p>';
+        v.onclick = function (e) { var b = e.target.closest('[data-rn]'); if (b) form(items[+b.dataset.rn]); };
+      }, function (err) { if (location.hash !== h0) return; v.innerHTML = '<p class="muted">' + esc(err.message) + '</p>'; });
+    } };
+
+    // ---------- sales & profit (owner / finance) ----------
+    // All numbers are calculated in the database (admin_sales_report); this page only shows them.
+    var LK = function (d) { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Colombo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d || new Date()); };
+    var addDays = function (ymd, n) { var d = new Date(ymd + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+    var rsx = function (n) {
+      if (n === null || n === undefined) return '—';
+      return esc(db.settings.currency || 'Rs.') + ' ' + Number(n).toLocaleString('en-US', { minimumFractionDigits: Number(n) % 1 ? 2 : 0, maximumFractionDigits: 2 });
+    };
+    var profitCell = function (n) { return n === null || n === undefined ? '<span class="muted" title="Some units have no cost price">—</span>' : n < 0 ? '<b style="color:var(--red)">' + rsx(n) + '</b>' : rsx(n); };
+    var dayName = function (ymd) { return new Date(ymd + 'T00:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }); };
+    var rp = { from: '', to: '', preset: '7', past: false, seq: 0 };
+    function presetRange(k) {
+      var t = LK(), m0 = t.slice(0, 8) + '01';
+      if (k === 'today') return [t, t];
+      if (k === 'yesterday') return [addDays(t, -1), addDays(t, -1)];
+      if (k === '7') return [addDays(t, -6), t];
+      if (k === '30') return [addDays(t, -29), t];
+      if (k === 'month') return [m0, t];
+      if (k === 'lastmonth') { var end = addDays(m0, -1); return [end.slice(0, 8) + '01', end]; }
+      return [rp.from, rp.to];
+    }
+    function csvCell(x) { var s = x === null || x === undefined ? '' : String(x); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }
+    function downloadCsv(name, rows) {
+      var blob = new Blob(['﻿' + rows.map(function (r) { return r.map(csvCell).join(','); }).join('\r\n')], { type: 'text/csv;charset=utf-8' });
+      var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click();
+      setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    }
+    VIEWS.reports = { title: 'Sales & Profit', sub: 'What sold, what did not, money taken and profit (Sri Lanka time)', render: function (v, arg) {
+      var tabs = '<div class="filters" style="margin-bottom:14px"><a class="tag' + (arg !== 'costs' ? ' ok' : '') + '" href="#reports">Report</a><a class="tag' + (arg === 'costs' ? ' ok' : '') + '" href="#reports/costs">Cost prices</a></div>';
+      if (arg === 'costs') return costsView(v, tabs);
+      if (!rp.from) { var r0 = presetRange(rp.preset); rp.from = r0[0]; rp.to = r0[1]; }
+      var presets = [['today', 'Today'], ['yesterday', 'Yesterday'], ['7', 'Last 7 days'], ['30', 'Last 30 days'], ['month', 'This month'], ['lastmonth', 'Last month']];
+      setActions('<button class="btn" id="rpCsv" disabled>⬇ Download (Excel / CSV)</button>');
+      v.innerHTML = tabs + '<div class="panel"><div class="filters" id="rpPre">' + presets.map(function (p) { return '<button type="button" class="tag' + (rp.preset === p[0] ? ' ok' : '') + '" data-pre="' + p[0] + '">' + p[1] + '</button>'; }).join('') + '</div>' +
+        '<form id="rpForm" style="display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-top:10px"><label>From<input type="date" name="from" required value="' + rp.from + '"></label><label>To<input type="date" name="to" required value="' + rp.to + '"></label><button class="btn primary">Show</button></form></div>' +
+        '<div id="rpOut"><p class="muted">Loading…</p></div>';
+      $('#rpPre').onclick = function (e) { var b = e.target.closest('[data-pre]'); if (!b) return; rp.preset = b.dataset.pre; var r = presetRange(rp.preset); rp.from = r[0]; rp.to = r[1]; route(); };
+      $('#rpForm').onsubmit = function (e) { e.preventDefault(); var E = e.target.elements; if (E.to.value < E.from.value) { toast('The end date is before the start date'); return; } rp.preset = ''; rp.from = E.from.value; rp.to = E.to.value; route(); };
+      var h0 = location.hash, seq = ++rp.seq;   // only the newest request may draw
+      SCG.api('GET', '/admin/reports/sales?from=' + rp.from + '&to=' + rp.to).then(function (r) { if (location.hash === h0 && seq === rp.seq) showReport(r); }, function (err) { if (location.hash === h0 && seq === rp.seq && $('#rpOut')) $('#rpOut').innerHTML = '<p class="muted">' + esc(err.message) + '</p>'; });
+
+      function showReport(r) {
+        var s = r.summary, out = $('#rpOut'); if (!out) return;
+        var warn = [];
+        if (s.costMissingUnits) warn.push('<b>Profit is not complete:</b> ' + s.costMissingUnits + ' unit(s) sold in this period have no cost price, so the total profit is not shown. ' +
+          'Profit on the items that do have a cost: <b>' + rsx(s.profitOnItemsWithCost) + '</b> (before promo-code discounts). ' + (can('costs.write') ? '<a href="#reports/costs">Enter cost prices →</a>' : 'Ask the owner to enter cost prices.'));
+        if (s.unpaidCardOrders) warn.push(s.unpaidCardOrders + ' card checkout(s) were started but not paid — not counted.');
+        if (s.closedOrders) warn.push(s.closedOrders + ' cancelled / refunded / expired order(s) worth ' + rsx(s.closedValue) + ' — not counted' + (s.refunds ? ' (refunds paid back: ' + rsx(s.refunds) + ')' : '') + '.');
+        var dmax = Math.max.apply(null, r.days.map(function (d) { return d.netSales; }).concat([1]));
+        var bestDay = r.days.reduce(function (b, d) { return !b || d.netSales > b.netSales ? d : b; }, null);
+        var rowsTop = function (list) { return list.length ? list.map(function (p, i) {
+          return '<tr><td>' + (i + 1) + '</td><td><a href="#products/edit:' + esc(p.slug) + '">' + esc(p.name) + '</a></td><td><b>' + p.units + '</b></td><td>' + rsx(p.sales) + '</td><td>' + profitCell(p.profit) + '</td><td>' + (p.marginPercent === null || p.marginPercent === undefined ? '—' : p.marginPercent + '%') + '</td></tr>'; }).join('')
+          : '<tr><td colspan="6" class="muted">Nothing sold in this period.</td></tr>'; };
+        out.innerHTML = (warn.length ? '<div class="panel checklist">' + warn.map(function (w) { return '<div class="ck"><span class="ck-i">!</span><span>' + w + '</span></div>'; }).join('') + '</div>' : '') +
+          '<div class="stats rp-stats">' + stat('Orders', s.orders, '#0b2a6f') + stat('Items sold', s.units, '#0b2a6f') + stat('Sales (after discounts)', rsx(s.netSales), '#f59e0b') +
+          stat('Money received', rsx(s.received), '#0f766e') + stat('Still to collect', rsx(s.toCollect), '#f59e0b') +
+          stat('Cost of goods', rsx(s.cost), '#64748b') + stat('Profit' + (s.marginPercent !== null && s.marginPercent !== undefined ? ' (' + s.marginPercent + '%)' : ''), s.profit === null || s.profit === undefined ? '—' : (s.profit < 0 ? '<span style="color:var(--red)">' + rsx(s.profit) + '</span>' : rsx(s.profit)), '#0f766e') +
+          stat('Average order', rsx(s.averageOrder), '#0b2a6f') + '</div>' +
+          '<p class="muted" style="font-size:12.5px;margin-top:-6px">Profit = sales after promo-code discounts − cost of goods. Shipping fees collected (' + rsx(s.shipping) + ') are not counted as profit; PayHere fees, courier and other costs are not included. ' +
+          'Orders count on the day they were placed (Sri Lanka time). “Still to collect” = cash on delivery and bank transfers not yet received.</p>' +
+          (r.days.length > 1 ? '<div class="panel"><h3>Sales per day' + (bestDay && bestDay.netSales ? ' <small>best day: ' + dayName(bestDay.day) + ' — ' + rsx(bestDay.netSales) + '</small>' : '') + '</h3>' +
+            '<div class="chart" style="grid-template-columns:repeat(' + r.days.length + ',minmax(0,1fr));gap:' + (r.days.length > 14 ? 2 : 10) + 'px">' + r.days.map(function (d, i) {
+              var step = Math.ceil(r.days.length / 8), label = i % step === 0 || i === r.days.length - 1;   // long ranges: label every few days
+              return '<div class="col"><div class="bar" style="height:' + Math.max(1, d.netSales / dmax * 100) + '%" title="' + esc(d.day) + ': ' + rsx(d.netSales) + '"></div>' +
+                (r.days.length <= 10 ? '<b>' + (d.netSales ? (d.netSales / 1000).toFixed(1) + 'k' : '0') + '</b>' : '<b></b>') + '<small>' + (label ? d.day.slice(5) : '&nbsp;') + '</small></div>'; }).join('') + '</div></div>' : '') +
+          '<div><div class="panel" style="padding:0" id="rpTop"><h3 style="padding:16px 16px 0">Best sellers <small>most items sold</small></h3><div class="table-wrap" style="border:0"><table class="table"><thead><tr><th>#</th><th>Product</th><th>Sold</th><th>Sales</th><th>Profit</th><th>Margin</th></tr></thead><tbody>' + rowsTop(r.topProducts) + '</tbody></table></div></div>' +
+          '<div class="panel" style="padding:0" id="rpLeast"><h3 style="padding:16px 16px 0">Sold least <small>products on sale now — the slowest sellers first</small></h3><div class="table-wrap" style="border:0"><table class="table"><thead><tr><th>Product</th><th>Sold</th><th>Sales</th></tr></thead><tbody>' + (r.leastSold.length ? r.leastSold.map(function (p) {
+            return '<tr><td><a href="#products/edit:' + esc(p.slug) + '">' + esc(p.name) + '</a></td><td>' + (p.units ? p.units : '<span class="tag warn">0</span>') + '</td><td>' + rsx(p.sales) + '</td></tr>'; }).join('') : '<tr><td colspan="3" class="muted">No products on sale.</td></tr>') + '</tbody></table></div>' +
+          '<p class="muted" style="padding:0 16px 12px;font-size:12.5px">' + r.notSoldCount + ' product(s) on sale did not sell at all in this period.</p></div></div>' +
+          '<div class="panel" style="padding:0"><h3 style="padding:16px 16px 0">Day by day</h3><div class="table-wrap" style="border:0"><table class="table"><thead><tr><th>Day</th><th>Orders</th><th>Items</th><th>Sales</th><th>Profit</th><th>Best seller that day</th></tr></thead><tbody>' + r.days.slice().reverse().map(function (d) {
+            return '<tr><td>' + dayName(d.day) + '</td><td>' + d.orders + '</td><td>' + d.units + '</td><td>' + rsx(d.netSales) + '</td><td>' + (d.orders ? profitCell(d.profit) : '—') + '</td><td>' + (d.best ? '<a href="#products/edit:' + esc(d.best.slug) + '">' + esc(d.best.name) + '</a> <small class="muted">(' + d.best.units + ' sold)</small>' : '<span class="muted">no sales</span>') + '</td></tr>'; }).join('') + '</tbody></table></div></div>' +
+          (r.allProducts.length > r.topProducts.length ? '<details class="panel"><summary><b>All ' + r.allProducts.length + ' products sold in this period</b></summary><div class="table-wrap" style="margin-top:10px"><table class="table"><thead><tr><th>#</th><th>Product</th><th>Sold</th><th>Sales</th><th>Profit</th><th>Margin</th></tr></thead><tbody>' + rowsTop(r.allProducts) + '</tbody></table></div></details>' : '');
+        var btn = $('#rpCsv'); if (btn) { btn.disabled = false; btn.onclick = function () {
+          var rows = [['Source Connect sales report', r.from + ' to ' + r.to + ' (Sri Lanka time)'], [],
+            ['Orders', s.orders], ['Items sold', s.units], ['Item sales', s.itemSales], ['Promo-code discounts', s.discounts], ['Sales after discounts', s.netSales], ['Shipping fees collected', s.shipping],
+            ['Money received', s.received], ['Still to collect', s.toCollect], ['Cost of goods', s.cost], ['Profit', s.profit], ['Margin %', s.marginPercent], ['Units without a cost price', s.costMissingUnits], [],
+            ['Day', 'Orders', 'Items', 'Sales', 'Profit', 'Best seller', 'Best seller units']].concat(r.days.map(function (d) { return [d.day, d.orders, d.units, d.netSales, d.profit, d.best ? d.best.name : '', d.best ? d.best.units : '']; }))
+            .concat([[], ['Product', 'Items sold', 'Sales', 'Cost', 'Profit', 'Margin %', 'Units without cost']]).concat(r.allProducts.map(function (p) { return [p.name, p.units, p.sales, p.cost, p.profit, p.marginPercent, p.costMissingUnits]; }));
+          downloadCsv('sales-' + r.from + '-to-' + r.to + '.csv', rows);
+        }; }
+      }
+    } };
+    function costsView(v, tabs) {
+      var edit = can('costs.write');
+      setActions('');
+      v.innerHTML = tabs + '<p class="muted">Loading…</p>';
+      var h0 = location.hash;   // draw only if the person is still on this page
+      SCG.api('GET', '/admin/product-costs').then(function (list) { if (location.hash !== h0) return;
+        var missing = list.filter(function (p) { return p.status === 'active' && (p.cost === null || p.cost === undefined); }).length;
+        v.innerHTML = tabs + '<div class="panel"><p style="margin-top:0">The <b>cost price</b> is what one item costs you (buying + import + packing). It is secret: customers and other staff never see it. ' +
+          'Each sale keeps the cost that was set <b>on the day it was sold</b>, so changing a cost later does not change past profit.</p>' +
+          (missing ? '<p><span class="tag warn">' + missing + ' product(s) on sale have no cost price yet</span></p>' : '<p><span class="tag ok">Every product on sale has a cost price</span></p>') +
+          (edit ? '<label style="display:flex;gap:8px;align-items:flex-start;font-size:13px"><input type="checkbox" id="cPast" style="margin-top:3px"' + (rp.past ? ' checked' : '') + '> <span>When I save, also use this cost for <b>earlier sales</b> of that product that have no cost yet. ' +
+            '(Only fills in sales without a cost; it never changes a cost that was already recorded.)</span></label>' : '<p class="muted">You can see cost prices but only the owner can change them.</p>') +
+          '<input id="cQ" placeholder="Search products…" style="margin-top:10px;max-width:320px"></div>' +
+          '<div class="panel" style="padding:0"><div class="table-wrap" style="border:0"><table class="table"><thead><tr><th>Product</th><th>Selling price</th><th>Cost price (Rs.)</th><th>Profit per item</th><th></th></tr></thead><tbody id="cRows">' + list.map(function (p) {
+            var margin = p.cost === null || p.cost === undefined ? '—' : profitCell(Math.round((p.price - p.cost) * 100) / 100) + (p.price ? ' <small class="muted">(' + Math.round((p.price - p.cost) / p.price * 1000) / 10 + '%)</small>' : '');
+            return '<tr data-name="' + esc(p.name.toLowerCase()) + '"><td>' + esc(p.name) + (p.status !== 'active' ? ' <span class="tag">' + esc(p.status) + '</span>' : '') + '</td><td>' + rsx(p.price) + '</td>' +
+              '<td>' + (edit ? '<input type="number" min="0" step="0.01" max="10000000" inputmode="decimal" style="width:130px" data-cost="' + esc(p.slug) + '" value="' + (p.cost === null || p.cost === undefined ? '' : p.cost) + '" placeholder="not set">' : rsx(p.cost)) + '</td>' +
+              '<td>' + margin + '</td><td>' + (edit ? '<button class="btn sm" data-save="' + esc(p.slug) + '">Save</button>' : '') + '</td></tr>'; }).join('') + '</tbody></table></div></div>';
+        if ($('#cPast')) $('#cPast').onchange = function (e) { rp.past = e.target.checked; };
+        $('#cQ').oninput = function (e) { var q = e.target.value.trim().toLowerCase(); $$('#cRows tr').forEach(function (tr) { tr.hidden = q && tr.dataset.name.indexOf(q) < 0; }); };
+        v.onclick = function (e) {
+          var b = e.target.closest('[data-save]'); if (!b) return;
+          var inp = $('[data-cost="' + b.dataset.save + '"]', v), raw = inp.value.trim(), past = !!($('#cPast') && $('#cPast').checked);
+          if (raw !== '' && !/^\d{1,8}(\.\d{1,2})?$/.test(raw)) { toast('Enter the cost in rupees, e.g. 1250 or 1250.50'); inp.focus(); return; }
+          if (raw === '' && past) { toast('Enter a cost before using it for earlier sales'); return; }
+          b.disabled = true;
+          SCG.api('PUT', '/admin/product-costs/' + encodeURIComponent(b.dataset.save), { cost: raw === '' ? null : raw, applyToPast: past }).then(function (r) {
+            toast(raw === '' ? 'Cost price removed' : '✓ Cost saved' + (r.appliedToEarlierSaleLines ? ' and used for ' + r.appliedToEarlierSaleLines + ' earlier sale line(s)' : ''));
+            route();
+          }, function (err) { b.disabled = false; fail(err); });
+        };
+      }, function (err) { if (location.hash !== h0) return; v.innerHTML = tabs + '<p class="muted">' + esc(err.message) + '</p>'; });
+    }
+
+    // ---------- start: is there a valid server session? ----------
+    $('#login').hidden = true;
+    SCG.adminBoot().then(function (staff) { if (!afterAuth(staff)) { $('#login').hidden = false; } }, function () { $('#login').hidden = false; });
+  })();
+
+  if (!SCG.API && loggedIn()) showApp();
 })();

@@ -1,0 +1,15 @@
+{
+  "name": "source-connect-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "baseline": "node baseline.mjs",
+    "e2e": "node run-e2e.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  },
+  "dependencies": {
+    "autocannon": "^8.0.0"
+  }
+}

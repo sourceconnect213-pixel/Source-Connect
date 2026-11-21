@@ -1,0 +1,15 @@
+node_modules/
+server/dist/
+server/.env
+server/uploads/
+*.env
+!.env.example
+e2e/out/
+.pgdata/
+*.log
+seed-catalogue/
+supabase/.temp/
+supabase/.branches/
+supabase/tests/node_modules/
+supabase/functions/.env
+vps/worker/node_modules/

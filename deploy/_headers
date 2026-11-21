@@ -1,0 +1,15 @@
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: SAMEORIGIN
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Strict-Transport-Security: max-age=31536000
+/admin/*
+  Cache-Control: no-store
+  X-Robots-Tag: noindex
+# The pages.dev address is the staging / technical address: keep it out of search engines, so a half-finished shop
+# (sample phone numbers, test products) is never found on Google. The real domain, once connected, is not affected.
+https://:project.pages.dev/*
+  X-Robots-Tag: noindex
+https://:version.:project.pages.dev/*
+  X-Robots-Tag: noindex

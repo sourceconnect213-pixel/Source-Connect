@@ -1,0 +1,102 @@
+name: Supabase hybrid
+# Runs everything against a LOCAL Supabase stack inside the CI runner. No hosted project, no real keys:
+# the PayHere values below are test-only placeholders that the tests themselves expect.
+on:
+  push:
+    branches: ['**']
+    paths: ['supabase/**', 'vps/**', 'js/**', 'css/**', 'assets/**', 'admin/**', 'index.html', 'deploy/**', 'e2e/supabase-e2e.mjs', '.github/workflows/supabase.yml']
+  pull_request:
+  workflow_dispatch:   # run (and deploy staging) by hand when GitHub misses a push
+permissions:
+  contents: read
+jobs:
+  supabase:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.122.1
+      - name: Tools for the backup drill
+        run: sudo apt-get update -q && sudo apt-get install -yq age rclone postgresql-client
+      - name: Install test, worker and browser-test packages
+        run: |
+          (cd supabase/tests && npm ci)
+          (cd vps/worker && npm ci)
+          (cd e2e && npm ci && npx playwright install --with-deps chromium)
+          npm install --prefix /tmp/s3rver s3rver@3.7.1
+      - name: Start local Supabase
+        run: supabase start -x studio,imgproxy,vector,logflare,mailpit
+      - name: Serve Edge Functions with test-only settings
+        run: |
+          printf '%s\n' PAYHERE_MODE=sandbox PAYHERE_LIVE_APPROVED=false PAYHERE_MERCHANT_ID=1211149 \
+            PAYHERE_MERCHANT_SECRET=local-test-secret-not-real PUBLIC_SITE_URL=http://127.0.0.1:8000 \
+            SITE_ORIGINS=http://127.0.0.1:8000,http://localhost:8000 ORDER_RATE_LIMIT_PER_MIN=1000 > supabase/functions/.env
+          nohup supabase functions serve --env-file supabase/functions/.env > /tmp/functions.log 2>&1 &
+          for i in $(seq 1 60); do curl -fs -o /dev/null -X OPTIONS http://127.0.0.1:54321/functions/v1/checkout && break; sleep 2; done
+      - name: Database, security, Edge Function and VPS worker tests
+        working-directory: supabase/tests
+        run: npx vitest run
+      - name: Browser end-to-end test (storefront + admin, MFA, checkout, PayHere sandbox flow)
+        run: |
+          nohup python3 -m http.server 8000 --bind 127.0.0.1 > /tmp/site.log 2>&1 &
+          sleep 2
+          node e2e/supabase-e2e.mjs
+      - name: Backup + restore drill (R2 replaced by a local HTTPS S3 server)
+        run: S3RVER=/tmp/s3rver/node_modules/.bin/s3rver bash vps/backup/drill/run-hybrid-drill.sh
+      - name: Drill log
+        if: always()
+        run: cat /var/tmp/sc-hybrid-drill/drill.log 2>/dev/null || true
+      - name: Edge Function log on failure
+        if: failure()
+        run: tail -100 /tmp/functions.log
+
+  # Staging website on Cloudflare Pages (https://source-connect-915.pages.dev), only after every test above passed.
+  # Needs the repository secret CLOUDFLARE_API_TOKEN (Cloudflare token with "Cloudflare Pages: Edit"); without it the job is skipped.
+  deploy-staging:
+    needs: supabase
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/claude/supabase-vps7-hybrid'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 59e6bd84070d105f6e61daa8ed73af6a
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Website files only (no server code, database files or docs)
+        run: |
+          mkdir dist && cp -r index.html admin assets css js dist/ && cp deploy/_headers dist/_headers
+          ! grep -rqE 'sb_secret_|"role":"service_role"' dist
+      - name: Check the Cloudflare token (prints only whether it is valid and what it can reach, never the token)
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        run: |
+          echo "token length: ${#CLOUDFLARE_API_TOKEN} (a Cloudflare token is about 40 characters; spaces or quotes around it break it)"
+          for u in "user/tokens/verify" "accounts/$CLOUDFLARE_ACCOUNT_ID/tokens/verify"; do
+            echo "== $u"; curl -s "https://api.cloudflare.com/client/v4/$u" -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | jq -c '{success, status: .result.status, errors}'
+          done
+          echo "== can it read the Pages project?"
+          curl -s "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/source-connect" -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" | jq -c '{success, project: .result.name, errors}'
+      - name: Deploy to Cloudflare Pages
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        run: npx -y wrangler@4.47.0 pages deploy dist --project-name source-connect --branch main --commit-dirty=true
+      - name: Check the live staging site
+        if: env.CLOUDFLARE_API_TOKEN != ''
+        run: |
+          sleep 15
+          for p in / /admin/ /js/config.js /js/supabase-backend.js; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://source-connect-915.pages.dev$p"); echo "$code $p"; [ "$code" = 200 ]
+          done
+          curl -s https://source-connect-915.pages.dev/js/config.js | grep -q nuqmaiybqmuvtfnjdzvn.supabase.co
+          # the staging address must stay out of search engines (deploy/_headers)
+          HDRS=$(curl -sI https://source-connect-915.pages.dev/); echo "$HDRS" | grep -i '^x-robots-tag' || true
+          grep -i '^x-robots-tag:.*noindex' <<<"$HDRS" >/dev/null
+      - name: No Cloudflare token yet
+        if: env.CLOUDFLARE_API_TOKEN == ''
+        run: echo "::notice::Add the repository secret CLOUDFLARE_API_TOKEN to deploy the staging site."

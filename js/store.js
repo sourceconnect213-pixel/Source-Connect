@@ -397,8 +397,14 @@
   }
 
   var cache = null;
+  // API mode (js/config.js sets window.SCG_API): the server is the source of truth and js/api.js fills the cache.
+  // Nothing here reads or writes the catalogue in localStorage then.
+  var API_MODE = !!(global.SCG_API || (global.SCG_SUPABASE && global.SCG_SUPABASE.url));   // self-hosted API or Supabase
+  function emptyDb() { var d = seed(); d.products = []; d.categories = []; d.collections = []; d.hero = []; d.placeholder = true; return d; }
+  function setCache(d) { cache = d; cleanColors(cache); return cache; }
   function load() {
     if (cache) return cache;
+    if (API_MODE) return (cache = emptyDb());
     var raw = safeGet(DB_KEY);
     if (raw) { try { cache = JSON.parse(raw); } catch (e) { cache = null; } }
     if (!cache || !cache.products) { cache = seed(); save(); return cache; }
@@ -415,9 +421,12 @@
     (d.collections || []).forEach(function (c) { fix(c, 'color'); });
     (d.hero || []).forEach(function (h) { fix(h, 'color'); });
   }
-  function save() { return safeSet(DB_KEY, JSON.stringify(cache)); }
-  function reset() { cache = seed(); save(); return cache; }
-  function reload() { cache = null; return load(); }
+  function save() {
+    if (API_MODE) return global.SCG && global.SCG.sync ? global.SCG.sync() : false;   // js/api.js sends the changes to the server
+    return safeSet(DB_KEY, JSON.stringify(cache));
+  }
+  function reset() { if (API_MODE) return cache; cache = seed(); save(); return cache; }
+  function reload() { if (API_MODE) return load(); cache = null; return load(); }
 
   function uid(prefix) { return (prefix || 'id') + '-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
   function slug(s) { return String(s).toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || uid('x'); }
@@ -459,7 +468,7 @@
   }
 
   function productVisual(p, color) {
-    if (p.image) return '<img src="' + imgSrc(p.image) + '" alt="' + escapeHTML(p.name) + '" loading="lazy">';
+    if (p.image) return '<img src="' + imgSrc(p.image) + '" alt="' + escapeHTML(p.name) + '" data-pid="' + escapeHTML(p.id) + '" loading="lazy">';
     var cat = categoryById(p.category);
     return productSVG(p.shape || (cat ? cat.shape : 'tshirt'), color || p.color, p.pattern, p.accent);
   }
@@ -478,7 +487,7 @@
   function getWish() { return getJSON(WISH_KEY, '[]'); }
   function saveWish(w) { safeSet(WISH_KEY, JSON.stringify(w)); }
   /* Customer profile, saved on this device. Created automatically from the first order's
-     checkout details. (Sign in with Google can be connected later through a backend.) */
+     checkout details. */
   /* Admin password hashing (salted SHA-256). This only hides the password in saved data;
      real protection needs a server login (planned with the backend). */
   function hashPassword(pw, salt) {
@@ -506,8 +515,8 @@
   }
 
   /** Resize an uploaded image File to a compact JPEG data URL. */
-  function imageToDataURL(file, max) {
-    max = max || 800;
+  function imageToDataURL(file, max, quality) {
+    max = max || 800; quality = quality || 0.8;
     return new Promise(function (resolve, reject) {
       var reader = new FileReader();
       reader.onerror = reject;
@@ -521,8 +530,8 @@
           var ctx = c.getContext('2d');
           ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
           ctx.drawImage(img, 0, 0, c.width, c.height);
-          var webp = c.toDataURL('image/webp', 0.8);
-          resolve(webp.indexOf('data:image/webp') === 0 ? webp : c.toDataURL('image/jpeg', 0.8));
+          var webp = c.toDataURL('image/webp', quality);
+          resolve(webp.indexOf('data:image/webp') === 0 ? webp : c.toDataURL('image/jpeg', quality));
         };
         img.src = reader.result;
       };
@@ -530,9 +539,24 @@
     });
   }
 
+  /* A picture that cannot be loaded (file removed, weak connection) never shows the browser's "broken picture" mark:
+     a product photo turns into the drawn product, anything else is hidden so the tinted box behind it shows. */
+  if (global.document) global.document.addEventListener('error', function (e) {
+    var img = e.target;
+    if (!img || img.tagName !== 'IMG' || img.getAttribute('data-fb')) return;
+    img.setAttribute('data-fb', '1');
+    var pid = img.getAttribute('data-pid'), p = pid ? productById(pid) : null;
+    if (p) {
+      var cat = categoryById(p.category), box = global.document.createElement('div');
+      box.innerHTML = productSVG(p.shape || (cat ? cat.shape : 'tshirt'), p.color, p.pattern, p.accent);
+      if (box.firstChild) { img.replaceWith(box.firstChild); return; }
+    }
+    img.style.visibility = 'hidden';
+  }, true);
+
   global.SCG = {
     SHAPES: SHAPES, PATTERNS: PATTERNS,
-    load: load, save: save, reset: reset, reload: reload, seed: seed,
+    load: load, save: save, reset: reset, reload: reload, seed: seed, setCache: setCache, apiMode: API_MODE,
     uid: uid, slug: slug, money: money, discount: discount, escapeHTML: escapeHTML, imgSrc: imgSrc, safeColor: safeColor,
     productSVG: productSVG, garmentSVG: garmentSVG, productVisual: productVisual, shade: shade,
     categoryById: categoryById, collectionById: collectionById, productById: productById,
