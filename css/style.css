@@ -774,3 +774,22 @@ img.ia.ia-in { animation: iaIn .75s cubic-bezier(.22, 1, .36, 1) backwards; }
 
 /* touch screens: tick boxes in the cart are big enough to hit */
 @media (pointer: coarse) { .cart-row input[type=checkbox] { width: 24px; height: 24px; } }
+
+/* profile photo + reviews panel */
+.avatar.has-photo { background: #eef0f5; overflow: hidden; }
+.avatar.has-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.photo-pick { display: flex; gap: 14px; align-items: center; }
+.pp-prev { width: 64px; height: 64px; flex: none; border-radius: 50%; overflow: hidden; display: grid; place-items: center; background: #eef0f5; color: #9aa3b5; }
+.pp-prev img { width: 100%; height: 100%; object-fit: cover; }
+.pp-prev svg { width: 30px; height: 30px; fill: none; stroke: currentColor; stroke-width: 1.6; }
+.pp-btn { margin-top: 6px; cursor: pointer; }
+.pp-err { color: var(--red); font-size: 12px; margin-top: 4px; }
+.rev-panel { margin-top: 14px; padding: 18px 20px; }
+.rev-panel h2 { margin: 0 0 14px; font-size: 18px; }
+.rev-top .avatar { width: 36px; height: 36px; font-size: 13px; }
+.rev-top { flex-wrap: nowrap; }
+.rev-who { display: grid; gap: 3px; min-width: 0; }
+.rev-who b { margin-right: 8px; }
+.rev-jump { display: contents; color: inherit; }
+.ao-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.ao-rev { border-top: 1px dashed #e0e3ea; margin-top: 10px; }

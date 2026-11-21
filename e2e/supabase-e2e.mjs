@@ -298,14 +298,31 @@ const acc = await ctx(); const cp = await page(acc, 'customer');
 await cp.goto(withSb('#account')); await cp.waitForSelector('#regF', { timeout: 20000 });
 await cp.fill('#regF [name=name]', 'E2E Customer'); await cp.fill('#regF [name=email]', `e2e-${Date.now()}@example.com`); check('create account: password needs 8+ characters only', (await cp.getAttribute('#regF [name=password]', 'minlength')) === '8' && /8\+ characters/.test(await cp.textContent('#regF')));
 await cp.fill('#regF [name=password]', 'lankatea');   // 8 letters, no numbers: allowed for customers
-await cp.click('#regF button:not(.pw-eye)'); await cp.waitForSelector('#profForm', { timeout: 20000 });
-check('customer can create an account', (await cp.textContent('.acct-head')).includes('E2E'));
+check('create account asks for phone, second phone, address, city, district and an optional photo',
+  !!(await cp.$('#regF [name=phone][required]')) && !!(await cp.$('#regF [name=phone2]:not([required])')) &&
+  !!(await cp.$('#regF [name=line1][required]')) && !!(await cp.$('#regF [name=city][required]')) && !!(await cp.$('#regF select[name=district][required]')) && !!(await cp.$('#regPhoto')));
+check('no "forgot password" email link (no email is sent); it says to call the shop', !(await cp.$('#forgot')) && /Forgot your password\? Call/.test(await cp.textContent('#loginF')));
+await cp.fill('#regF [name=phone]', '0771234567'); await cp.fill('#regF [name=phone2]', '0112223344');
+await cp.fill('#regF [name=line1]', '45 Galle Road'); await cp.fill('#regF [name=city]', 'Dehiwala'); await cp.selectOption('#regF [name=district]', 'Colombo');
+await cp.setInputFiles('#regPhoto', { name: 'big.jpg', mimeType: 'image/jpeg', buffer: Buffer.alloc(2 * 1024 * 1024 + 100) });
+check('a photo over 2 MB is refused at once with its size', /2\.0 MB\. Choose one up to 2 MB/.test(await cp.textContent('#regPhotoErr')));
+const avatarPng = Buffer.from(await cp.evaluate(() => { const c = document.createElement('canvas'); c.width = 900; c.height = 700; const x = c.getContext('2d'); x.fillStyle = '#0b2a6f'; x.fillRect(0, 0, 900, 700); x.fillStyle = '#d7141a'; x.beginPath(); x.arc(450, 350, 220, 0, 7); x.fill(); return Array.from(new Uint8Array(atob(c.toDataURL('image/png').split(',')[1]).split('').map(ch => ch.charCodeAt(0)))); }));
+await cp.setInputFiles('#regPhoto', { name: 'me.png', mimeType: 'image/png', buffer: avatarPng });
+check('the chosen photo is previewed', !!(await cp.$('#regPhotoPrev img')) && (await cp.textContent('#regPhotoErr')) === '');
+await cp.screenshot({ path: OUT + '/sb-register.jpg', type: 'jpeg', quality: 70, fullPage: true });
+await cp.click('#regF button.btn.full'); await cp.waitForSelector('#profForm', { timeout: 20000 }); await cp.waitForTimeout(800);
+check('customer can create an account (no email confirmation)', (await cp.textContent('.acct-head')).includes('E2E'));
+const custRow = sql(`SELECT c.phone || '|' || c.phone2 || '|' || a.line1 || '|' || a.city || '|' || a.district_code || '|' || (c.avatar_path ~ ('^' || c.id || '/')) FROM app.customers c JOIN app.customer_addresses a ON a.customer_id = c.id AND a.is_default WHERE c.name = 'E2E Customer' ORDER BY c.created_at DESC LIMIT 1`);
+check('saved: both phones, the address and the photo', custRow === '0771234567|0112223344|45 Galle Road|Dehiwala|colombo|true', custRow);
+check('the photo was made smaller before upload (max 512 px)', await cp.evaluate(async () => { const i = document.querySelector('.acct-head .avatar img'); if (!i) return false; await i.decode(); return Math.max(i.naturalWidth, i.naturalHeight) <= 512; }));
+check('My details shows the second phone and the photo', (await cp.inputValue('#profForm [name=phone2]')) === '0112223344' && !!(await cp.$('#mePPrev img')));
 await cp.reload(); await cp.waitForTimeout(2500); await cp.evaluate(() => { location.hash = 'account'; }); await cp.waitForTimeout(1500);
 check('customer stays signed in after reload', !!(await cp.$('#profForm')));
 
 // 8. mobile
 const mob = await ctx({ ...devices['iPhone 13'] }); const mp = await page(mob, 'mobile');
 await mp.goto(withSb('')); await mp.waitForSelector('.card', { timeout: 20000 }); await mp.waitForTimeout(800);
+check('every product card shows stars', await mp.evaluate(() => { const cards = [...document.querySelectorAll('.card')]; return cards.length > 0 && cards.every(c => !!c.querySelector('.stars')); }));
 check('mobile home: no sideways scrolling', (await mp.evaluate(() => document.documentElement.scrollWidth - innerWidth)) <= 1);
 await mp.screenshot({ path: OUT + '/sb-home-mobile.jpg', type: 'jpeg', quality: 70 });
 await cartWith(mp, 'mens-2'); await mp.waitForSelector('#placeBtn:not([disabled])', { timeout: 20000 });
@@ -474,8 +491,9 @@ check('review form on a phone: no sideways scrolling', (await rv.evaluate(() => 
 await rv.evaluate(() => document.getElementById('ordRev').scrollIntoView()); await rv.screenshot({ path: OUT + '/sb-review-form-phone.jpg', type: 'jpeg', quality: 70 });
 await rv.setViewportSize({ width: 1366, height: 860 });
 await rv.evaluate(() => { location.hash = 'p/bags-4'; }); await rv.waitForSelector('#ptabs', { timeout: 15000 });
-await rv.click('#ptabs button[data-t=r]'); await rv.waitForSelector('#revBox .rev', { timeout: 15000 });
+await rv.waitForSelector('#revBox .rev', { timeout: 15000 });
 const revTxt = await rv.textContent('#revBox');
+check('product page: "Ratings & Reviews" is shown under the product without opening a tab', await rv.isVisible('#revPanel') && !(await rv.$('#ptabs button[data-t=r]')));
 check('product page: average, count, the review with "Verified purchase"', /4\/5/.test(revTxt.replace(/\s/g, '')) && /1 rating/.test(revTxt) && /Ruwani F\./.test(revTxt) && /Verified purchase/.test(revTxt) && /Nice leather/.test(revTxt), revTxt.slice(0, 160));
 check('product page never shows the full name or phone', !/Fernando|0771112233/.test(revTxt));
 await rv.evaluate(() => document.getElementById('revBox').scrollIntoView()); await rv.screenshot({ path: OUT + '/sb-reviews-pdp.jpg', type: 'jpeg', quality: 70 });
@@ -487,13 +505,50 @@ check('admin sees the buyer, order and review', /Ruwani F\.[\s\S]*Ruwani Fernand
 await ap.screenshot({ path: OUT + '/sb-admin-reviews.jpg', type: 'jpeg', quality: 70 });
 await ap.fill('.rv-card textarea', 'Thank you, Ruwani!'); await ap.click('.rv-card [data-act=reply]'); await ap.waitForTimeout(1500);
 check('reply saved', sql(`SELECT reply FROM app.product_reviews`) === 'Thank you, Ruwani!');
-await rv.click('#ptabs button[data-t=d]'); await rv.click('#ptabs button[data-t=r]'); await rv.waitForSelector('#revBox .rev-reply', { timeout: 15000 });
+await rv.reload(); await rv.waitForSelector('#revBox .rev-reply', { timeout: 15000 });
 check('the reply shows under the review on the website', /Response from Source Connect[\s\S]*Thank you, Ruwani!/.test(await rv.textContent('#revBox')));
 ap.once('dialog', d => d.accept()); await ap.click('.rv-card [data-act=hide]'); await ap.waitForTimeout(1500);
 check('hidden: off the website and out of the average', sql(`SELECT status FROM app.product_reviews`) === 'hidden' && sql(`SELECT reviews_count FROM app.products WHERE slug = 'bags-4'`) === '0');
-await rv.click('#ptabs button[data-t=d]'); await rv.click('#ptabs button[data-t=r]'); await rv.waitForTimeout(1500);
+await rv.reload(); await rv.waitForSelector('#revBox p', { timeout: 15000 }); await rv.waitForTimeout(800);
 check('product page shows no reviews after hiding', /No reviews yet/.test(await rv.textContent('#revBox')));
 await rvC.close();
+// a signed-in customer reviews from My orders, with the profile photo next to the review
+const cust = await ctx(); const kp2 = await page(cust, 'my-orders');
+const cemail = `rev-${Date.now()}@example.com`;
+await kp2.goto(withSb('#account')); await kp2.waitForSelector('#regF', { timeout: 20000 });
+await kp2.fill('#regF [name=name]', 'Dilani Perera'); await kp2.fill('#regF [name=email]', cemail); await kp2.fill('#regF [name=password]', 'galleface');
+await kp2.fill('#regF [name=phone]', '0779876543'); await kp2.fill('#regF [name=line1]', '8 Sea Street'); await kp2.fill('#regF [name=city]', 'Galle'); await kp2.selectOption('#regF [name=district]', 'Galle');
+await kp2.setInputFiles('#regPhoto', { name: 'd.png', mimeType: 'image/png', buffer: avatarPng });
+await kp2.click('#regF button.btn.full'); await kp2.waitForSelector('#profForm', { timeout: 20000 });
+const custId = sql(`SELECT id FROM app.customers WHERE email = '${cemail}'`);
+const myOrder = await (await fetch(`${SB}/rest/v1/rpc/place_order`, { method: 'POST', headers: { apikey: SERVICE, authorization: `Bearer ${SERVICE}`, 'content-type': 'application/json' },
+  body: JSON.stringify({ p_input: { items: [{ id: 'bags-4', size: '', qty: 1 }], customer: { name: 'Dilani Perera', phone: '0779876543', email: cemail, address: '8 Sea Street', city: 'Galle', district: 'Galle', note: '' }, payment: 'cod' }, p_customer_id: custId, p_idempotency_key: null }) })).json();
+sql(`UPDATE app.orders SET status = 'delivered' WHERE order_number = '${myOrder.orderNumber}'`);
+await kp2.reload(); await kp2.waitForSelector(`[data-rev="${myOrder.orderNumber}"]`, { timeout: 20000 });
+await kp2.click(`[data-rev="${myOrder.orderNumber}"]`); await kp2.waitForSelector(`#rev-${myOrder.orderNumber} .rev-form`, { timeout: 15000 });
+check('My orders: "Rate & review" opens the stars and comment under the order', (await kp2.$$(`#rev-${myOrder.orderNumber} .star-pick button`)).length === 5);
+await kp2.click(`#rev-${myOrder.orderNumber} .star-pick button[data-n="5"]`); await kp2.fill(`#rev-${myOrder.orderNumber} textarea`, 'Perfect size for my phone.');
+await kp2.click(`#rev-${myOrder.orderNumber} .rev-form button.btn`);
+await kp2.waitForFunction((n) => /Update review/.test(document.getElementById('rev-' + n)?.textContent || ''), myOrder.orderNumber, { timeout: 15000 });
+check('review from My orders saved', sql(`SELECT rating || ' ' || comment FROM app.product_reviews WHERE customer_id = '${custId}'`) === '5 Perfect size for my phone.');
+await kp2.setViewportSize({ width: 390, height: 844 }); await kp2.waitForTimeout(300);
+check('My orders review on a phone: no sideways scrolling', (await kp2.evaluate(() => document.documentElement.scrollWidth - innerWidth)) <= 1);
+await kp2.evaluate((n) => document.getElementById('rev-' + n).scrollIntoView(), myOrder.orderNumber); await kp2.screenshot({ path: OUT + '/sb-myorders-review-phone.jpg', type: 'jpeg', quality: 70 });
+await kp2.setViewportSize({ width: 1366, height: 860 });
+await kp2.evaluate(() => { location.hash = 'p/bags-4'; }); await kp2.waitForSelector('#revBox .rev', { timeout: 15000 });
+check('the review shows the customer photo', await kp2.evaluate(() => { const i = [...document.querySelectorAll('#revBox .rev')].find(r => /Dilani P\./.test(r.textContent))?.querySelector('.avatar img'); return !!i && i.complete && i.naturalWidth > 0; }));
+check('the rating at the top of the product page follows the live reviews', /5 · 1 rating/.test(await kp2.textContent('.rev-jump')));
+await kp2.locator('#revPanel .rev').first().scrollIntoViewIfNeeded(); await kp2.waitForTimeout(1200);   // pictures fade in when they come into view
+await kp2.waitForFunction(() => { const l = [...document.querySelectorAll('#revPanel img')]; return l.length > 0 && l.every(i => i.complete && i.naturalWidth > 0); }, null, { timeout: 15000 });
+await kp2.locator('#revPanel').screenshot({ path: OUT + '/sb-reviews-photo.jpg', type: 'jpeg', quality: 70 });
+await cust.close();
+// staff: registered accounts and a new password for a customer who forgot it
+await ap.evaluate(() => { location.hash = 'dashboard'; }); await ap.waitForTimeout(600);
+await ap.evaluate(() => { location.hash = 'customers'; }); await ap.waitForSelector('#alist table', { timeout: 15000 });
+check('admin: registered accounts with both phones and the address', /Dilani Perera[\s\S]*0779876543[\s\S]*8 Sea Street, Galle, Galle/.test(await ap.textContent('#alist')));
+await ap.click(`#alist [data-cpw="${custId}"]`); await ap.fill('#cpwF [name=pw]', 'newgalle9'); await ap.click('#cpwF button.primary'); await ap.waitForTimeout(1500);
+const relog = await (await fetch(`${SB}/auth/v1/token?grant_type=password`, { method: 'POST', headers: { apikey: ANON, 'content-type': 'application/json' }, body: JSON.stringify({ email: cemail, password: 'newgalle9' }) })).json();
+check('staff set a new password; the customer signs in with it', !!relog.access_token);
 
 // 11. usage page (main admin)
 await ap.evaluate(() => { location.hash = 'usage'; }); await ap.waitForSelector('.use-row', { timeout: 15000 });

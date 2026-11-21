@@ -1807,7 +1807,26 @@
           }).join('') + '</tbody></table></div>' : '<p class="empty" style="padding:16px">No customers yet.</p>';
         }, function (err) { $('#clist').innerHTML = '<p class="muted" style="padding:12px">' + esc(err.message) + '</p>'; });
       }
-      load(''); var t; $('#cq').oninput = function (e) { clearTimeout(t); t = setTimeout(function () { load(e.target.value.trim()); }, 300); };
+      load(''); var t; $('#cq').oninput = function (e) { clearTimeout(t); t = setTimeout(function () { load(e.target.value.trim()); accounts(e.target.value.trim()); }, 300); };
+      // registered accounts (also those who have not ordered yet); no email is sent, so a forgotten password is set here
+      v.insertAdjacentHTML('beforeend', '<div class="panel" style="padding:0;margin-top:14px"><h3 style="padding:14px 16px 0;margin:0">Registered accounts</h3><div id="alist"><p class="muted" style="padding:12px">Loading…</p></div></div>');
+      function accounts(q) {
+        SCG.api('GET', '/admin/customer-accounts' + (q ? '?q=' + encodeURIComponent(q) : '')).then(function (list) {
+          $('#alist').innerHTML = list.length ? '<div class="table-wrap"><table class="table"><thead><tr><th>Customer</th><th>Phones</th><th>Address</th><th>Orders</th><th>Joined</th>' + (can('customers.write') ? '<th></th>' : '') + '</tr></thead><tbody>' + list.map(function (c) {
+            return '<tr><td><div class="cust-cell">' + (c.avatarUrl ? '<img class="cust-ph" src="' + esc(c.avatarUrl) + '" alt="">' : '<span class="cust-ph">' + esc(String(c.name || '?').charAt(0).toUpperCase()) + '</span>') + '<div><b>' + esc(c.name) + '</b><br><small class="muted">' + esc(c.email || '') + '</small></div></div></td>' +
+              '<td>' + esc(c.phone || '') + (c.phone2 ? '<br><small class="muted">' + esc(c.phone2) + '</small>' : '') + '</td><td><small>' + esc(c.address || '') + '</small></td><td>' + c.orders + '</td><td><small>' + new Date(c.createdAt).toLocaleDateString() + '</small></td>' +
+              (can('customers.write') ? '<td><button class="btn sm" data-cpw="' + esc(c.id) + '" data-cname="' + esc(c.name) + '">Set new password</button></td>' : '') + '</tr>';
+          }).join('') + '</tbody></table></div>' : '<p class="empty" style="padding:16px">No registered accounts yet.</p>';
+        }, function (err) { $('#alist').innerHTML = '<p class="muted" style="padding:12px">' + esc(err.message) + '</p>'; });
+      }
+      accounts('');
+      $('#alist').onclick = function (e) {
+        var b = e.target.closest('[data-cpw]'); if (!b) return;
+        openModal('New password — ' + b.dataset.cname, '<form class="form" id="cpwF"><p class="full muted" style="margin:0;font-size:13px">Use this when the customer forgot their password. Check it is really them first (call the phone number on the account). Tell them the new password yourself; they can sign in with it straight away.</p>' +
+          '<label class="full">New password (8+ characters)<input name="pw" required minlength="8" maxlength="72" autocomplete="off"></label><div class="form-foot"><button class="btn primary">Save password</button></div></form>');
+        $('#cpwF').onsubmit = function (ev) { ev.preventDefault();
+          SCG.api('POST', '/admin/customers/' + b.dataset.cpw + '/password', { password: ev.target.elements.pw.value }).then(function () { toast('New password saved'); closeModal(); }, fail); };
+      };
     };
 
     // ---------- settings: server password + data panel ----------

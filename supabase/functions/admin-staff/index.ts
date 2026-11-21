@@ -5,6 +5,7 @@
 //   {action:"update", id, username?, displayName?, roles?, shops?, status?, secondStep?, resetPassword?}
 //   {action:"change-own-password", currentPassword, newPassword}   (any staff member, clears the temporary-password flag)
 //   {action:"delete", id}   (main admin; rules checked in the database first, then the sign-in account is removed)
+//   {action:"customer-password", id, newPassword}   (customers.write; a customer forgot their password and no email is sent)
 import { clientIp, dbError, env, json, preflight, rateLimited, readBody, rpc, userFrom } from '../_shared/common.ts';
 
 const AUTH = `${env('SUPABASE_URL')}/auth/v1`;
@@ -114,6 +115,16 @@ Deno.serve(async (req) => {
     if (!s.ok) return dbError(req, s);
     const d = await admin(`/users/${b.id}`, 'DELETE');
     if (!d.ok && d.status !== 404) return json(req, 500, { error: 'server_error', message: 'The staff account was removed and can no longer open the admin, but its sign-in record could not be deleted. Remove it in the Supabase dashboard (Authentication → Users).' });
+    return json(req, 200, { ok: true });
+  }
+  if (b?.action === 'customer-password' && typeof b.id === 'string' && /^[0-9a-f-]{36}$/.test(b.id)) {
+    const pw = b.newPassword;
+    if (typeof pw !== 'string' || pw.length < 8) return json(req, 400, { error: 'bad_request', message: 'Use at least 8 characters.' });
+    if (pw.length > 72) return json(req, 400, { error: 'bad_request', message: 'Password is too long.' });
+    const s = await rpc('admin_customer_password_check', { p_id: b.id }, caller.token);   // permission + "is a customer" + audit, in the database
+    if (!s.ok) return dbError(req, s);
+    const u = await admin(`/users/${b.id}`, 'PUT', { password: pw });
+    if (!u.ok) return json(req, 400, { error: 'bad_request', message: (await u.json())?.msg ?? 'Password not accepted.' });
     return json(req, 200, { ok: true });
   }
   return json(req, 400, { error: 'bad_request', message: 'Unknown action.' });

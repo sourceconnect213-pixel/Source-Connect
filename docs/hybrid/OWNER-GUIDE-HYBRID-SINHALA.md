@@ -116,3 +116,19 @@
   - **1–2 stars**, **Not answered**, **Hidden** walin filter karanna.
   - **Reply**: oyage reply eka review eka yatin "Response from Source Connect" kiyala penawa.
   - **Hide from the website**: abusive, topic ekata adala nathi, nathnam kenekuge private details thiyena review witharak hide karanna. Negative kiyala hide karanna epa; polite reply ekak denna. Hide kalama e review eka average eken ain wenawa. Customer eka edit kalath hide wela thiyena eka hide wela ma thiyenawa.
+
+## Customer accounts (email nathuwa)
+- Account ekak hadaddi **email confirmation mail ekak yawanne nê**. Account eka ehemama hædila customer log wenawa.
+- Sign-up form eke thiyenne: **Full name, Email, Phone number, Other phone (optional), Address, City, District, Password (akuru 8+)** saha kæmathi nam **Profile photo** ekak.
+  - Photo eka JPEG, PNG hari WebP wenna ona, **2 MB** wenakan. Eeta wada loku nam eka ehema thiyena size ekath ekkama kiyala nawaththanawa. Upload karanna kalin photo eka podi karanawa (512 px), e nisa ikmanata load wenawa.
+  - Photo eka customer ge reviews langa penawa. **My account → My details** eken wenas karanna hari ain karanna hari puluwan.
+- Email yawanne nathi nisa "Forgot password" link eka nê. Ehema welawata page eke kiyanawa shop ekata call/WhatsApp karanna kiyala:
+  - **Admin → Customers → Registered accounts → Set new password** (main admin saha ops manager).
+  - Mulinma e kenage account eke phone number ekata call karala ehe kenamada kiyala check karanna. Ita passe aluth password eka e kenata kiyanna.
+  - Hæma reset ekakma Audit Log eke record wenawa.
+- **Registered accounts** list eke penawa: name, email, phones dekama, address, photo, orders ganana saha join una dawasa.
+
+## Stars saha reviews
+- Hæma product card ekakma yatin stars penawa (Flash Sale cards walath). Review nathi product ekaka stars alu paatin (0) penawa.
+- Product page eke yatin **Ratings & Reviews** kotasa hæmathissema penawa: average eka, 5★…1★ ganan, aluthma reviews, customer ge photo, "Verified purchase" saha oyage reply eka.
+- **My account → My orders** eke deliver una order ekaka **★ Rate & review** obanna. Ethanin stars saha comment eka danna puluwan, wena page ekakata yanna ona nê.

@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { anon, staff, cfg } from './helpers.js';
+import { beforeAll } from 'vitest';
+import { anon, staff, cfg, db } from './helpers.js';
+beforeAll(async () => { await db().query(`UPDATE app.rate_limits SET hits = 0 WHERE key LIKE 'admin-staff:%'`); });
 
 // Customers: 8+ characters, any mix (the owner's choice). Staff: still 12+ with letters and digits (admin-staff function).
 describe('password rules', () => {

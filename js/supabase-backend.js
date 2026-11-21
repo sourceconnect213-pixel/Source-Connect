@@ -113,6 +113,29 @@
       });
     }, function (e) { if (e && e.status !== undefined) throw e; throw err(0, 'network', 'Cannot reach the shop server. Check your internet connection and try again.'); });
   }
+  // customer profile photo: <user id>/<uuid>.<ext> in the public "avatars" bucket (2 MB, JPEG/PNG/WebP)
+  function avatarUrl(path) { return path ? URL_ + '/storage/v1/object/public/avatars/' + path : ''; }
+  function withAvatar(p) { if (p) p.avatarUrl = avatarUrl(p.avatar); return p; }
+  function jwtSub(t) { try { var b = t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'); return JSON.parse(atob(b + '==='.slice((b.length + 3) % 4))).sub || ''; } catch (e) { return ''; } }
+  function storageDelete(bucket, key, t) { return fetch(URL_ + '/storage/v1/object/' + bucket + '/' + key, { method: 'DELETE', headers: { apikey: ANON, authorization: 'Bearer ' + t } }).catch(function () {}); }
+  function setAvatar(file, prev) {
+    return token('customer').then(function (t) {
+      if (!t) throw err(401, 'unauthorized', 'Please sign in to your account.');
+      if (!file) return rpc('set_my_avatar', { p_path: null }, 'customer').then(function (p) { if (prev) storageDelete('avatars', prev, t); return { customer: withAvatar(p) }; });
+      if (file.size > 2 * 1024 * 1024) throw err(400, 'too_big', 'The photo is larger than 2 MB. Choose a smaller photo.');
+      if (!/^image\/(jpeg|png|webp)$/.test(file.type)) throw err(400, 'bad_type', 'Use a JPEG, PNG or WebP photo.');
+      var ext = /png/.test(file.type) ? 'png' : /webp/.test(file.type) ? 'webp' : 'jpg';
+      var id = (global.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx'.replace(/x/g, function () { return (Math.random() * 16 | 0).toString(16); });
+      var key = jwtSub(t) + '/' + id + '.' + ext;
+      return fetch(URL_ + '/storage/v1/object/avatars/' + key, { method: 'POST', headers: { apikey: ANON, authorization: 'Bearer ' + t, 'content-type': file.type, 'x-upsert': 'false' }, body: file })
+        .then(function (res) { return readJson(res).then(function (d) {
+          if (!res.ok) throw err(res.status, 'upload_failed', /exceed|too large|size/i.test((d && (d.message || d.error)) || '') ? 'The photo is larger than 2 MB. Choose a smaller photo.' : /too many/i.test((d && (d.message || d.error)) || '') ? 'Too many photos. Try again in a moment.' : 'The photo could not be uploaded (JPEG, PNG or WebP up to 2 MB).');
+          return rpc('set_my_avatar', { p_path: key }, 'customer');
+        }); })
+        .then(function (p) { if (prev && prev !== key) storageDelete('avatars', prev, t); return { customer: withAvatar(p) }; });
+    });
+  }
+
   function uploadImage(file) {
     var ext = /png/.test(file.type) ? 'png' : /webp/.test(file.type) ? 'webp' : 'jpg';
     var d = new Date(), id = (global.crypto && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2);
@@ -163,18 +186,20 @@
     if (path === '/orders') return edge('checkout', body, load('customer') ? 'customer' : null, opts.idempotencyKey ? { 'idempotency-key': opts.idempotencyKey } : {});
     if (path === '/orders/track') return edge('track-order', body);
     // ---- product reviews (buyers of a delivered order; the database checks who may write) ----
-    if ((x = m(/^\/reviews\/([a-z0-9-]+)$/, path))) return rpc('product_reviews', { p_product: x[1], p_stars: qs.stars ? Number(qs.stars) : null, p_limit: 10, p_offset: Number(qs.offset || 0) });
+    if ((x = m(/^\/reviews\/([a-z0-9-]+)$/, path))) return rpc('product_reviews', { p_product: x[1], p_stars: qs.stars ? Number(qs.stars) : null, p_limit: 10, p_offset: Number(qs.offset || 0) })
+      .then(function (d) { if (d && d.reviews) d.reviews.forEach(withAvatar); return d; });
     if (path === '/orders/reviews') return rpc('order_reviews', { p_number: body.number, p_token: body.token || null }, 'customer');
     if (path === '/orders/reviews/save') return rpc('submit_review', { p_number: body.number, p_token: body.token || null, p_product: body.product, p_rating: Number(body.rating), p_comment: body.comment || '' }, 'customer');
     if (path === '/account/orders') return rpc('my_orders', {}, 'customer');
     if ((x = m(/^\/account\/orders\/([^/]+)$/, path))) return rpc('my_order', { p_number: decodeURIComponent(x[1]) }, 'customer').then(function (o) { if (!o) throw err(404, 'not_found', 'Order not found.'); return o; });
     if (path === '/customers/me' && method === 'GET') return token('customer').then(function (t) {
       if (!t) throw err(401, 'unauthorized', 'Please sign in to your account.');
-      return rpc('my_profile', {}, 'customer').then(function (p) { if (!p) throw err(401, 'unauthorized', 'Please sign in to your account.'); return { customer: p }; });
+      return rpc('my_profile', {}, 'customer').then(function (p) { if (!p) throw err(401, 'unauthorized', 'Please sign in to your account.'); return { customer: withAvatar(p) }; });
     });
     if (path === '/customers/me' && method === 'PUT') return rpc('update_my_profile', { p_data: body }, 'customer');
     if (path === '/customers/login') return signIn('customer', body.email, body.password).then(function () { return call('GET', '/customers/me'); });
-    if (path === '/customers/register') return authFetch('/signup', { email: body.email, password: body.password, data: { name: body.name, phone: body.phone || '' } })
+    if (path === '/account/avatar') return setAvatar(body.file || null, body.previous || null);
+    if (path === '/customers/register') return authFetch('/signup', { email: body.email, password: body.password, data: { name: body.name, phone: body.phone || '', phone2: body.phone2 || '', address: body.address || null } })
       .then(function (s) { if (s && s.access_token) { save('customer', s); return call('GET', '/customers/me'); } return { customer: { name: body.name, email: body.email, verified: false, pendingConfirmation: true } }; });
     if (path === '/customers/logout') return signOut('customer').then(function () { return { ok: true }; });
     if (path === '/customers/password-reset/request') return authFetch('/recover?redirect_to=' + encodeURIComponent(location.origin + location.pathname), { email: body.email }).then(function () { return { ok: true }; });
@@ -226,6 +251,9 @@
     }
     // ---- admin ops ----
     if (path === '/admin/dashboard') return rpc('admin_dashboard', {}, 'staff');
+    if (m(/^\/admin\/customer-accounts$/, path)) return rpc('admin_customer_accounts', { p_q: qs.q || null, p_limit: 100, p_offset: +(qs.offset || 0) }, 'staff')
+      .then(function (l) { (l || []).forEach(withAvatar); return l; });
+    if ((x = m(/^\/admin\/customers\/([0-9a-f-]{36})\/password$/, path))) return edge('admin-staff', { action: 'customer-password', id: x[1], newPassword: body.password }, 'staff');
     if (m(/^\/admin\/customers$/, path)) return rpc('admin_customers', { p_q: qs.q || null, p_limit: +(qs.limit || 100), p_offset: +(qs.offset || 0) }, 'staff');
     if (m(/^\/admin\/audit$/, path)) return rpc('admin_audit', { p_before: qs.before ? +qs.before : null, p_action: qs.action || null, p_limit: +(qs.limit || 100) }, 'staff');
     if (path === '/admin/backups') return rpc('admin_backups', {}, 'staff');
@@ -278,5 +306,5 @@
     return type || 'signin';
   }
 
-  global.SCGSupabase = { call: call, rpc: rpc, edge: edge, mfa: mfa, signOut: signOut, token: token, url: URL_, takeAuthRedirect: takeAuthRedirect };
+  global.SCGSupabase = { avatarUrl: avatarUrl, call: call, rpc: rpc, edge: edge, mfa: mfa, signOut: signOut, token: token, url: URL_, takeAuthRedirect: takeAuthRedirect };
 })(window);

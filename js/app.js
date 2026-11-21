@@ -37,7 +37,7 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
     for (var i = 1; i <= 5; i++) out += I.star.replace('<svg', '<svg class="' + (r >= i - .25 ? '' : 'off') + '"');
     return out + '</span>';
   }
-  function ratingLine(p) { return p.reviews ? stars(p.rating) + '<span>(' + p.reviews + ')</span>' : '<span>No ratings yet</span>'; }
+  function ratingLine(p) { return stars(p.reviews ? p.rating : 0) + '<span>(' + (p.reviews || 0) + ')</span>'; }
   function originTag(p) {
     var o = SCG.originInfo(p);
     return o.local ? '<span class="origin local">' + I.truck + 'Ships from Colombo</span>' : '<span class="origin">' + I.plane + esc(o.label) + '</span>';
@@ -83,7 +83,7 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
       '<div class="price">' + money(p.price) + '</div>' +
       '<div class="was">' + (p.comparePrice ? '<s>' + money(p.comparePrice) + '</s><b>-' + off + '%</b>' : '') + '</div>' +
       (opts.flash
-        ? '<div class="soldbar' + (soldPct < 45 ? ' lo' : '') + '"><i style="width:' + soldPct + '%"></i><span>' + (sold ? fmtCount(sold) + ' sold' : 'New deal') + '</span></div>'
+        ? '<div class="soldbar' + (soldPct < 45 ? ' lo' : '') + '"><i style="width:' + soldPct + '%"></i><span>' + (sold ? fmtCount(sold) + ' sold' : 'New deal') + '</span></div>' + '<div class="meta">' + ratingLine(p) + '</div>'
         : '<div class="meta">' + ratingLine(p) + '</div>' + originTag(p)) +
       (opts.add ? '<div class="add-mini">' + (p.stock > 0 ? '<button data-add="' + p.id + '">Add to Cart</button>' : '<button disabled>Out of stock</button>') + '</div>' : '') +
       '</div></article>';
@@ -470,7 +470,7 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
   // ---------- product reviews (API mode): written by buyers of a delivered order ----------
   function revDate(t) { try { return new Date(t).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); } catch (e) { return ''; } }
   function revItem(v) {
-    return '<div class="rev"><div class="rev-top">' + stars(v.rating) + '<b>' + esc(v.name) + '</b><span class="rev-ok">✓ Verified purchase</span></div>' +
+    return '<div class="rev"><div class="rev-top">' + avatar({ name: v.name, avatarUrl: v.avatarUrl }) + '<div class="rev-who"><div><b>' + esc(v.name) + '</b><span class="rev-ok">✓ Verified purchase</span></div>' + stars(v.rating) + '</div></div>' +
       '<small class="rev-meta">' + revDate(v.at) + (v.variant ? ' · ' + esc(v.variant) : '') + (v.edited ? ' · edited' : '') + '</small>' +
       (v.comment ? '<p class="rev-text">' + esc(v.comment) + '</p>' : '') +
       (v.reply ? '<div class="rev-reply"><b>Response from Source Connect</b><p>' + esc(v.reply) + '</p></div>' : '') + '</div>';
@@ -484,6 +484,7 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
         box = $('#revBox'); if (!box) return;
         if (!d) { box.innerHTML = '<p style="margin:0;color:var(--muted)">Reviews are not available for this product.</p>'; return; }
         st.list = st.list.concat(d.reviews || []);
+        var hj = $('.rev-jump'); if (hj && !st.stars) hj.innerHTML = d.count ? stars(d.average) + '<span>' + d.average + ' · ' + d.count + (d.count === 1 ? ' rating' : ' ratings') + '</span>' : stars(0) + '<span>No ratings yet</span>';
         if (!d.count) { box.innerHTML = '<p style="margin:0;color:var(--muted)">No reviews yet. Customers who received this product can rate it from their order (My account → My orders).</p>'; return; }
         var bars = [5, 4, 3, 2, 1].map(function (n) { var c = d.stars[String(n)] || 0;
           return '<button type="button" data-fs="' + n + '" class="' + (st.stars === n ? 'on' : '') + '" aria-label="Show ' + n + '-star reviews"><span>' + n + '★</span><i><em style="width:' + (c / d.count * 100) + '%"></em></i><span>' + c + '</span></button>'; }).join('');
@@ -501,9 +502,10 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
     load(false);
   }
   // order page: the buyer rates each item after delivery
-  function orderReviewsUI(number, token) {
+  function orderReviewsUI(number, token, el) {
     SCG.api('POST', '/orders/reviews', { number: number, token: token || null }).then(function (d) {
-      var box = $('#ordRev'); if (!box || !d || !d.canReview || !d.items.length) return;
+      var box = el || $('#ordRev'); if (!box || !document.body.contains(box)) return;
+      if (!d || !d.canReview || !d.items.length) { if (el) box.innerHTML = '<p class="muted" style="margin:8px 0">Nothing to review in this order.</p>'; return; }
       box.innerHTML = '<h3 style="margin:18px 0 4px">Rate your items</h3><p class="muted" style="margin:0 0 10px;font-size:13px">Your rating helps other customers. Other people see your first name and the first letter of your last name.</p>' +
         d.items.map(function (it, i) {
           var v = it.review;
@@ -526,7 +528,7 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
           if (!n) { toast('Choose 1 to 5 stars'); return; }
           var btn = f.querySelector('button.btn'); btn.disabled = true;
           SCG.api('POST', '/orders/reviews/save', { number: number, token: token || null, product: it.id, rating: n, comment: f.elements.comment.value.trim() })
-            .then(function () { toast('Thank you for your review!'); orderReviewsUI(number, token); }, function (err) { btn.disabled = false; toast(err.message); });
+            .then(function () { toast('Thank you for your review!'); orderReviewsUI(number, token, el); }, function (err) { btn.disabled = false; toast(err.message); });
         };
       });
       if (revJump) { revJump = false; box.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
@@ -552,7 +554,7 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
         '<div class="gallery"><div class="big" id="big" style="--c:' + p.color + '">' + visual(p) + '</div>' +
           '<div class="thumbs" id="thumbs">' + (imgs.length > 1 ? imgs.map(function (src, i) { return '<button class="' + (i ? '' : 'on') + '" data-img="' + i + '" aria-label="Photo ' + (i + 1) + '"><img src="' + SCG.imgSrc(src) + '" alt=""></button>'; }).join('') : imgs.length ? '' : vars.map(function (c, i) { return '<button class="' + (i ? '' : 'on') + '" data-c="' + c + '" aria-label="Colour ' + (i + 1) + '">' + visual(p, c) + '</button>'; }).join('')) + '</div></div>' +
         '<div><h1>' + esc(p.name) + '</h1>' +
-          '<div class="sub">' + (p.reviews ? stars(p.rating) + '<span>' + p.rating + ' · ' + p.reviews + (p.reviews === 1 ? ' rating' : ' ratings') + '</span>' : '<span>No ratings yet</span>') + (p.sold ? '<span>' + fmtCount(p.sold) + ' sold</span>' : '') + (p.brand ? '<span>Brand: <a href="#search/' + encodeURIComponent(p.brand) + '">' + esc(p.brand) + '</a></span>' : '') + '</div>' +
+          '<div class="sub">' + (SCG.API ? '<a href="#" class="rev-jump">' : '') + (p.reviews ? stars(p.rating) + '<span>' + p.rating + ' · ' + p.reviews + (p.reviews === 1 ? ' rating' : ' ratings') + '</span>' : stars(0) + '<span>No ratings yet</span>') + (SCG.API ? '</a>' : '') + (p.sold ? '<span>' + fmtCount(p.sold) + ' sold</span>' : '') + (p.brand ? '<span>Brand: <a href="#search/' + encodeURIComponent(p.brand) + '">' + esc(p.brand) + '</a></span>' : '') + '</div>' +
           (isFlash(p) ? '<div class="flash-strip"><span>⚡ ' + esc(db.settings.flashTitle || 'Flash Sale') + '</span>' + cdHTML() + '</div>' : '') +
           '<div class="price-box"><div class="now">' + money(p.price) + '</div>' + (p.comparePrice ? '<div class="old"><s>' + money(p.comparePrice) + '</s><b>-' + off + '%</b></div>' : '') + '</div>' +
           (vars.length > 1 ? '<div class="opt"><span>Colour</span><div class="swatches" id="sw">' + vars.map(function (c, i) { return '<button class="' + (i ? '' : 'on') + '" data-c="' + c + '" aria-label="Colour ' + (i + 1) + '">' + visual(p, c) + '</button>'; }).join('') + '</div></div>' : '') +
@@ -560,7 +562,8 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
           '<div class="opt"><span>Quantity</span><div><div class="qty"><button data-q="-1" aria-label="Less">−</button><span id="qv">1</span><button data-q="1" aria-label="More">+</button></div> <small id="avail" style="margin-left:8px"></small></div></div>' +
           '<div class="buy-row"><button class="btn navy" id="buyNow">Buy Now</button><button class="btn" id="addCart">Add to Cart</button><button class="btn line heart-btn" data-wish="' + p.id + '" aria-label="Wishlist" style="flex:0 0 auto;padding:14px">' + I.heart + '</button></div>' +
         '</div></div>' +
-        '<div class="panel tabs-box"><nav id="ptabs"><button class="on" data-t="d">Description</button><button data-t="s">Specifications</button><button data-t="r">Ratings</button></nav><div class="body" id="pbody"></div></div>' +
+        '<div class="panel tabs-box"><nav id="ptabs"><button class="on" data-t="d">Description</button><button data-t="s">Specifications</button>' + (SCG.API ? '' : '<button data-t="r">Ratings</button>') + '</nav><div class="body" id="pbody"></div></div>' +
+        (SCG.API ? '<div class="panel rev-panel" id="revPanel"><h2>Ratings &amp; Reviews</h2><div id="revBox"><p style="margin:0;color:var(--muted)">Loading reviews…</p></div></div>' : '') +
       '</div>' +
       '<aside><div class="panel side-box"><h4>Delivery</h4>' +
         '<div class="side-row">' + I.pin + '<div><b>' + esc(s.address || 'Sri Lanka') + '</b><small>Islandwide delivery</small></div></div>' +
@@ -581,11 +584,14 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
       $$('#ptabs button').forEach(function (b) { b.classList.toggle('on', b.dataset.t === t); });
       $('#pbody').innerHTML = t === 'd' ? '<p style="margin-top:0;white-space:pre-line">' + esc(p.description) + '</p><ul style="color:var(--muted)"><li>Brand: ' + esc(p.brand) + '</li><li>' + (oi.local ? 'Ships from Colombo (' + esc(oi.days) + ' days)' : 'Imported from ' + esc(oi.name) + ' (' + esc(oi.days) + ' days)') + '</li>' + (s.payCOD ? '<li>Cash on Delivery available islandwide</li>' : '') + '</ul>'
         : t === 's' ? '<table class="spec"><tr><td>Brand</td><td>' + esc(p.brand) + '</td></tr><tr><td>Category</td><td>' + esc(cat ? cat.name : '') + '</td></tr><tr><td>SKU</td><td>' + esc(p.id.toUpperCase()) + '</td></tr>' + ((p.sizes || []).length ? '<tr><td>Sizes</td><td>' + esc(p.sizes.join(', ')) + '</td></tr>' : '') + '<tr><td>Ships from</td><td>' + (oi.local ? 'Colombo stock' : esc(oi.name)) + '</td></tr><tr><td>In stock</td><td>' + p.stock + '</td></tr></table>'
-          : SCG.API ? '<div id="revBox"><p style="margin:0;color:var(--muted)">Loading reviews…</p></div>'
           : !p.reviews ? '<p style="margin:0;color:var(--muted)">No ratings yet. Ratings appear here after customers review this product.</p>' : '<div class="rating-sum"><div><div class="big">' + p.rating + '<small style="font-size:18px;color:var(--muted)">/5</small></div>' + stars(p.rating) + '<div style="color:var(--muted);font-size:12px">' + p.reviews + ' ratings</div></div><div class="rbars">' + dist.map(function (n, i) { return '<div><span>' + (5 - i) + '★</span><i><em style="width:' + (p.reviews ? n / p.reviews * 100 : 0) + '%"></em></i><span>' + n + '</span></div>'; }).join('') + '</div></div>';
     }
     tab('d');
-    $('#ptabs').onclick = function (e) { var b = e.target.closest('button'); if (b) { tab(b.dataset.t); if (b.dataset.t === 'r' && SCG.API) reviewsUI(p); } };
+    $('#ptabs').onclick = function (e) { var b = e.target.closest('button'); if (b) tab(b.dataset.t); };
+    if (SCG.API) {
+      reviewsUI(p);
+      var rj = $('.rev-jump'); if (rj) rj.onclick = function (e) { e.preventDefault(); var rp = $('#revPanel'); if (rp) rp.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+    }
     $('#thumbs').addEventListener('click', function (e) { var b = e.target.closest('[data-img]'); if (!b) return; $('#big').innerHTML = '<img src="' + SCG.imgSrc(imgs[+b.dataset.img]) + '" alt="' + esc(p.name) + '" data-pid="' + esc(p.id) + '">'; $$('#thumbs button').forEach(function (x) { x.classList.toggle('on', x === b); }); });
     function pick(c) { st.color = c; $('#big').innerHTML = visual(p, c); ['#thumbs', '#sw'].forEach(function (s) { if ($(s)) $$('button', $(s)).forEach(function (b) { b.classList.toggle('on', b.dataset.c === c); }); }); }
     // colour buttons only (photo thumbnails have their own handler above)
@@ -908,52 +914,141 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
     };
   }
 
+  // profile photo: up to 2 MB (checked here and by the server); made smaller (max 512 px, JPEG) before it is sent
+  var PHOTO_MAX = 2 * 1024 * 1024;
+  function photoProblem(f) {
+    if (!f) return '';
+    if (!/^image\/(jpeg|png|webp)$/.test(f.type)) return 'Use a JPEG, PNG or WebP photo.';
+    if (f.size > PHOTO_MAX) return 'The photo is ' + (f.size / 1048576).toFixed(1) + ' MB. Choose one up to 2 MB.';
+    return '';
+  }
+  function shrinkPhoto(f) {
+    return new Promise(function (resolve) {
+      try {
+        var url = URL.createObjectURL(f), img = new Image();
+        img.onload = function () {
+          try {
+            var k = Math.min(1, 512 / Math.max(img.naturalWidth, img.naturalHeight)), c = document.createElement('canvas');
+            c.width = Math.max(1, Math.round(img.naturalWidth * k)); c.height = Math.max(1, Math.round(img.naturalHeight * k));
+            var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(img, 0, 0, c.width, c.height);
+            URL.revokeObjectURL(url);
+            c.toBlob(function (b) { resolve(b && b.size && b.size < f.size ? b : f); }, 'image/jpeg', 0.85);
+          } catch (e) { resolve(f); }
+        };
+        img.onerror = function () { URL.revokeObjectURL(url); resolve(f); };
+        img.src = url;
+      } catch (e) { resolve(f); }
+    });
+  }
+  function photoField(id, cur) {
+    return '<div class="full photo-pick"><span class="pp-prev" id="' + id + 'Prev">' + (cur ? '<img src="' + esc(cur) + '" alt="">' : I.user) + '</span>' +
+      '<div><b>Profile photo</b> <small class="muted">(optional)</small><br><small class="muted">JPEG, PNG or WebP, up to 2 MB. It is shown next to your reviews.</small><br>' +
+      '<label class="btn line sm pp-btn">' + (cur ? 'Change photo' : 'Choose photo') + '<input type="file" id="' + id + '" accept="image/jpeg,image/png,image/webp" hidden></label>' +
+      (cur ? ' <button type="button" class="link-sm" id="' + id + 'Del">Remove</button>' : '') + '<div class="pp-err" id="' + id + 'Err"></div></div></div>';
+  }
+  function wirePhoto(id, onPick) {
+    var inp = $('#' + id); if (!inp) return;
+    inp.onchange = function () {
+      var f = inp.files && inp.files[0], bad = photoProblem(f);
+      $('#' + id + 'Err').textContent = bad;
+      if (bad || !f) { inp.value = ''; onPick(null); return; }
+      var u = URL.createObjectURL(f); $('#' + id + 'Prev').innerHTML = '<img src="' + u + '" alt="">';
+      onPick(f);
+    };
+  }
+  function districtOptions(sel) { return '<option value="">Choose…</option>' + DISTRICTS.map(function (d) { return '<option' + (d === sel ? ' selected' : '') + '>' + d + '</option>'; }).join(''); }
+  var PHONE = 'pattern="[+]?[0-9][0-9 ]{8,14}" title="A phone number, e.g. 077 123 4567"';
+
   function renderAccountApi() {
     setTitle('My account');
     var me = SCG.customer;
     if (!me) {
+      var regPhoto = null, s = db.settings || {};
       app.innerHTML = '<div class="wrap"><div class="crumbs"><a href="#">Home</a>›<span>My account</span></div><div class="acct-grid">' +
         '<form class="panel form" id="loginF"><h3>Sign in</h3><label class="full">Email<input name="email" type="email" required autocomplete="email"></label>' +
           '<label class="full">Password<input name="password" type="password" required autocomplete="current-password"></label>' +
-          '<button class="btn navy full" style="grid-column:1/-1">Sign in</button><p class="full" style="margin:0"><button type="button" class="link-sm" id="forgot">Forgot password?</button></p><p class="full co-msg" id="loginMsg" style="margin:0;color:var(--red)"></p>' +
-          '</form>' +
-        '<form class="panel form" id="regF"><h3>Create an account</h3><p class="full" style="margin:0;color:var(--muted);font-size:13px">Optional: you can always check out as a guest. An account keeps all your orders together.</p>' +
-          '<label class="full">Full name<input name="name" required maxlength="80" autocomplete="name"></label><label>Email<input name="email" type="email" required autocomplete="email"></label>' +
-          '<label>Phone (optional)<input name="phone" maxlength="20" autocomplete="tel"></label><label class="full">Password (8+ characters)<input name="password" type="password" required minlength="8" autocomplete="new-password"></label>' +
+          '<button class="btn navy full" style="grid-column:1/-1">Sign in</button>' +
+          '<p class="full muted" style="margin:0;font-size:13px">Forgot your password? Call' + (s.whatsapp ? ' or WhatsApp' : '') + ' us on <b>' + esc(s.phone || '') + '</b> and we will set a new one for you.</p>' +
+          '<p class="full co-msg" id="loginMsg" style="margin:0;color:var(--red)"></p></form>' +
+        '<form class="panel form" id="regF"><h3>Create an account</h3><p class="full" style="margin:0;color:var(--muted);font-size:13px">Optional: you can always check out as a guest. An account keeps your orders, address and reviews together.</p>' +
+          '<label class="full">Full name<input name="name" required minlength="2" maxlength="80" autocomplete="name"></label>' +
+          '<label class="full">Email<input name="email" type="email" required maxlength="120" autocomplete="email"></label>' +
+          '<label>Phone number<input name="phone" type="tel" required maxlength="20" ' + PHONE + ' autocomplete="tel"></label>' +
+          '<label>Other phone (optional)<input name="phone2" type="tel" maxlength="20" ' + PHONE + '></label>' +
+          '<label class="full">Address<input name="line1" required minlength="4" maxlength="200" autocomplete="street-address" placeholder="House number, street"></label>' +
+          '<label>City<input name="city" required minlength="2" maxlength="60" autocomplete="address-level2"></label>' +
+          '<label>District<select name="district" required>' + districtOptions('') + '</select></label>' +
+          '<label class="full">Password (8+ characters)<input name="password" type="password" required minlength="8" maxlength="72" autocomplete="new-password"></label>' +
+          photoField('regPhoto', '') +
           '<button class="btn full" style="grid-column:1/-1">Create account</button><p class="full" id="regMsg" style="margin:0;color:var(--red)"></p></form></div>' +
         (SCG.myOrders().length ? '<div class="panel" style="padding:16px;margin-top:14px"><h3 style="margin-top:0">Orders placed on this device</h3>' + SCG.myOrders().map(function (o) { return '<div class="sum-row"><a href="#order/' + esc(o.number) + '">' + esc(o.number) + '</a><span class="muted">' + new Date(o.at).toLocaleDateString() + '</span></div>'; }).join('') + '</div>' : '') + '</div>';
+      wirePhoto('regPhoto', function (f) { regPhoto = f; });
       var done = function (c) {
-        if (c && c.pendingConfirmation) { toast('We sent a confirmation link to ' + c.email + '. Open it to finish creating your account.'); renderAccountApi(); return; }
+        if (c && c.pendingConfirmation) { $('#regMsg').textContent = 'Your account was created, but it still needs to be switched on. Please call us on ' + (s.phone || '') + '.'; return; }
         updateAccount(); toast('Welcome, ' + c.name.split(' ')[0] + '!'); renderAccountApi();
       };
       $('#loginF').onsubmit = function (e) { e.preventDefault(); var E = e.target.elements; SCG.customerAuth('login', { email: E.email.value.trim(), password: E.password.value }).then(done, function (err) { $('#loginMsg').textContent = err.message; }); };
-      $('#regF').onsubmit = function (e) { e.preventDefault(); var E = e.target.elements; SCG.customerAuth('register', { name: E.name.value.trim(), email: E.email.value.trim(), phone: E.phone.value.trim(), password: E.password.value }).then(done, function (err) { $('#regMsg').textContent = err.message; }); };
-      $('#forgot').onclick = function () { var em = $('#loginF').elements.email.value.trim(); if (!em) { $('#loginMsg').textContent = 'Type your email above first.'; return; } SCG.api('POST', '/customers/password-reset/request', { email: em }).then(function () { $('#loginMsg').style.color = 'var(--green, #0a7d3c)'; $('#loginMsg').textContent = 'If that email has an account, we sent a reset link.'; }, function (err) { $('#loginMsg').textContent = err.message; }); };
+      $('#regF').onsubmit = function (e) {
+        e.preventDefault(); var E = e.target.elements, btn = e.target.querySelector('button.btn');
+        var bad = photoProblem(regPhoto); if (bad) { $('#regMsg').textContent = bad; return; }
+        $('#regMsg').textContent = ''; btn.disabled = true;
+        SCG.customerAuth('register', { name: E.name.value.trim(), email: E.email.value.trim(), phone: E.phone.value.trim(), phone2: E.phone2.value.trim(),
+          address: { line1: E.line1.value.trim(), city: E.city.value.trim(), district: E.district.value }, password: E.password.value })
+          .then(function (c) {
+            if (!c || c.pendingConfirmation || !regPhoto) return c;
+            return shrinkPhoto(regPhoto).then(function (b) { return SCG.api('POST', '/account/avatar', { file: b }); })
+              .then(function (r) { SCG.customer = r.customer; return r.customer; }, function (err) { toast('Your account is ready, but the photo was not saved: ' + err.message + ' Add it in My account.'); return c; });
+          })
+          .then(done, function (err) { btn.disabled = false; $('#regMsg').textContent = err.message; });
+      };
       if (window.SCG_AUTH_NOTICE) { $('#loginMsg').textContent = window.SCG_AUTH_NOTICE; window.SCG_AUTH_NOTICE = null; }   // e.g. an email link that has expired
       return;
     }
-    app.innerHTML = '<div class="wrap"><div class="crumbs"><a href="#">Home</a>›<span>My account</span></div><div class="panel acct-head">' + avatar(me) + '<div><h2>Hello, ' + esc(me.name.split(' ')[0]) + '</h2><small>' + esc(me.email || '') + (me.verified ? ' · email confirmed' : ' · please confirm your email (check your inbox)') + '</small></div></div>' +
+    var newPhoto = null;
+    app.innerHTML = '<div class="wrap"><div class="crumbs"><a href="#">Home</a>›<span>My account</span></div><div class="panel acct-head">' + avatar(me) + '<div><h2>Hello, ' + esc(me.name.split(' ')[0]) + '</h2><small>' + esc(me.email || '') + '</small></div></div>' +
       '<div class="acct-grid"><div class="panel" id="myOrders"><p class="muted" style="padding:16px">Loading your orders…</p></div><div>' +
-      '<form class="panel form" id="profForm"><h3>My details</h3><label class="full">Full name<input name="name" required maxlength="80" value="' + esc(me.name) + '"></label>' +
-        '<label>Phone<input name="phone" maxlength="20" value="' + esc(me.phone || '') + '"></label>' +
+      '<form class="panel form" id="profForm"><h3>My details</h3><label class="full">Full name<input name="name" required minlength="2" maxlength="80" value="' + esc(me.name) + '"></label>' +
+        '<label>Phone number<input name="phone" type="tel" maxlength="20" ' + PHONE + ' value="' + esc(me.phone || '') + '"></label>' +
+        '<label>Other phone<input name="phone2" type="tel" maxlength="20" ' + PHONE + ' value="' + esc(me.phone2 || '') + '"></label>' +
         '<label class="full">Address<input name="line1" maxlength="200" value="' + esc(me.address ? me.address.line1 : '') + '"></label><label>City<input name="city" maxlength="60" value="' + esc(me.address ? me.address.city : '') + '"></label>' +
-        '<label>District<select name="district">' + DISTRICTS.map(function (d) { return '<option' + (me.address && d === me.address.district ? ' selected' : '') + '>' + d + '</option>'; }).join('') + '</select></label>' +
+        '<label>District<select name="district">' + districtOptions(me.address ? me.address.district : '') + '</select></label>' +
+        photoField('meP', me.avatarUrl || '') +
         '<button class="btn navy full" style="grid-column:1/-1">Save details</button></form>' +
       '<div class="panel acct-side"><a class="btn line full" href="#wishlist">My wishlist</a><button class="btn line full" id="signOut">Sign out</button></div></div></div></div>';
+    wirePhoto('meP', function (f) { newPhoto = f; });
+    var del = $('#mePDel');
+    if (del) del.onclick = function () {
+      if (!confirm('Remove your profile photo?')) return;
+      SCG.api('POST', '/account/avatar', { file: null, previous: me.avatar }).then(function (r) { SCG.customer = r.customer; updateAccount(); toast('Photo removed'); renderAccountApi(); }, function (err) { toast(err.message); });
+    };
     SCG.api('GET', '/account/orders').then(function (list) {
       $('#myOrders').innerHTML = '<div class="sec-head" style="padding:14px 16px 0"><h2 style="font-size:17px">My orders</h2></div>' + (list.length ? list.map(function (o) {
         var idx = ST_IDX[o.status] === undefined ? -1 : ST_IDX[o.status], bad = { cancelled: 1, expired: 1, refunded: 1 }[o.status];
         return '<div class="acct-order"><div class="ao-top"><b>' + esc(o.number) + '</b><span class="ao-status ' + (bad ? 'x' : o.status === 'delivered' ? 'ok' : '') + '">' + esc(ST_LABEL[o.status] || o.status) + '</span><span class="muted">' + new Date(o.placedAt).toLocaleDateString() + ' · ' + money(o.total) + '</span></div>' +
           (!bad ? '<div class="ao-bar">' + [0, 1, 2, 3, 4].map(function (i) { return '<i class="' + (i <= idx ? 'on' : '') + '"></i>'; }).join('') + '</div>' : '') +
-          '<div class="ao-actions"><a class="link-sm" href="#order/' + esc(o.number) + '">Details</a>' + (o.status === 'delivered' ? ' <a class="link-sm rev-link" href="#order/' + esc(o.number) + '">★ Rate &amp; review</a>' : '') + '</div></div>';
+          '<div class="ao-actions"><a class="link-sm" href="#order/' + esc(o.number) + '">Details</a>' + (o.status === 'delivered' ? ' <button type="button" class="btn sm rev-open" data-rev="' + esc(o.number) + '">★ Rate &amp; review</button>' : '') + '</div>' +
+          (o.status === 'delivered' ? '<div class="ao-rev" id="rev-' + esc(o.number) + '" hidden></div>' : '') + '</div>';
       }).join('') : '<p class="empty">No orders yet.</p>');
-      $('#myOrders').onclick = function (e) { if (e.target.closest('.rev-link')) revJump = true; };
+      $('#myOrders').onclick = function (e) {
+        var b = e.target.closest('.rev-open'); if (!b) return;
+        var box = document.getElementById('rev-' + b.dataset.rev); if (!box) return;
+        box.hidden = !box.hidden;
+        if (!box.hidden) { box.innerHTML = '<p class="muted" style="margin:8px 0">Loading…</p>'; orderReviewsUI(b.dataset.rev, null, box); }
+      };
     }, function (err) { $('#myOrders').innerHTML = '<p class="empty">' + esc(err.message) + '</p>'; });
     $('#profForm').onsubmit = function (e) {
-      e.preventDefault(); var E = e.target.elements;
-      var body = { name: E.name.value.trim(), phone: E.phone.value.trim() };
-      if (E.line1.value.trim()) body.address = { line1: E.line1.value.trim(), city: E.city.value.trim(), district: E.district.value };
-      SCG.api('PUT', '/customers/me', body).then(function () { return SCG.loadCustomer(); }).then(function () { updateAccount(); toast('Your details are saved'); }, function (err) { toast(err.message); });
+      e.preventDefault(); var E = e.target.elements, btn = e.target.querySelector('button.btn');
+      var body = { name: E.name.value.trim(), phone: E.phone.value.trim(), phone2: E.phone2.value.trim() };
+      if (E.line1.value.trim()) {
+        if (!E.district.value) { toast('Please choose your district'); return; }
+        body.address = { line1: E.line1.value.trim(), city: E.city.value.trim(), district: E.district.value };
+      }
+      var bad = photoProblem(newPhoto); if (bad) { toast(bad); return; }
+      btn.disabled = true;
+      SCG.api('PUT', '/customers/me', body)
+        .then(function () { return newPhoto ? shrinkPhoto(newPhoto).then(function (b) { return SCG.api('POST', '/account/avatar', { file: b, previous: me.avatar }); }) : null; })
+        .then(function () { return SCG.loadCustomer(); })
+        .then(function () { updateAccount(); toast('Your details are saved'); renderAccountApi(); }, function (err) { btn.disabled = false; toast(err.message); });
     };
     $('#signOut').onclick = function () { SCG.customerLogout().then(function () { updateAccount(); toast('Signed out'); renderAccountApi(); }); };
   }
@@ -1038,7 +1133,7 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
   });
 
   /* ---------------- customer account ---------------- */
-  function avatar(p) { var n = String(p.name || '?').trim().split(/\s+/); return '<span class="avatar">' + esc((n[0][0] || '?') + (n[1] ? n[1][0] : '')).toUpperCase() + '</span>'; }
+  function avatar(p) { if (p && p.avatarUrl) return '<span class="avatar has-photo"><img src="' + esc(p.avatarUrl) + '" alt=""></span>'; var n = String(p.name || '?').trim().split(/\s+/); return '<span class="avatar">' + esc((n[0][0] || '?') + (n[1] ? n[1][0] : '')).toUpperCase() + '</span>'; }
   function updateAccount() {
     var p = SCG.API ? SCG.customer : SCG.getProfile(), el = $('#accName');
     if (el) el.textContent = p ? p.name.split(' ')[0] : 'Account';

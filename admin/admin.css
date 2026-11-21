@@ -464,3 +464,7 @@ body.pv-dragging iframe { pointer-events: none; }
 .rv-reply { display: grid; gap: 4px; font-size: 13px; font-weight: 600; }
 .rv-reply textarea { font: inherit; font-weight: 400; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; resize: vertical; }
 .rv-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* registered customer accounts */
+.cust-cell { display: flex; gap: 10px; align-items: center; }
+.cust-ph { width: 34px; height: 34px; flex: none; border-radius: 50%; object-fit: cover; display: grid; place-items: center; background: var(--navy); color: #fff; font-weight: 700; font-size: 13px; }

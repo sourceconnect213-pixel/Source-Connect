@@ -225,6 +225,8 @@ describe('database rules (same guarantees as before)', () => {
     expect(await fails(`DELETE FROM app.inventory_movements`)).toMatch(/append-only/);
     expect(await fails(`UPDATE app.banners SET link = 'javascript:alert(1)'`)).toMatch(/check/);
     expect(await fails(`UPDATE app.ops_settings SET payhere_mode = 'live'`)).toMatch(/check/);          // live needs recorded owner approval
-    expect((await q1(`SELECT count(*)::int n FROM app.products WHERE (rating > 0 OR reviews_count > 0) AND created_by IS NULL`)).n).toBe(0);
+    // no made-up ratings: every product's rating count is exactly its visible customer reviews
+    expect((await q1(`SELECT count(*)::int n FROM app.products p WHERE p.reviews_count <> (SELECT count(*) FROM app.product_reviews r WHERE r.product_id = p.id AND r.status = 'visible')
+                       OR (p.reviews_count = 0 AND p.rating <> 0)`)).n).toBe(0);
   });
 });
