@@ -428,6 +428,7 @@ verify_jwt = false
 # Return photos: guests prove the order with its secret tracking token, checked by the database inside the function.
 [functions.return-photo]
 verify_jwt = false
-# Staff only: a valid Supabase Auth token is required; permissions are checked in the database.
+# Staff only. The function itself checks the caller's token with Supabase Auth (401 without a valid sign-in) and the
+# database checks the permission. The platform's own JWT check is off: it does not understand the new API keys / signing keys.
 [functions.admin-staff]
-verify_jwt = true
+verify_jwt = false

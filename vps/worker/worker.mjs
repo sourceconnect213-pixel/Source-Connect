@@ -29,7 +29,9 @@ const handlers = {};
 
 // --- product photos -------------------------------------------------------------------------------------------
 const SUPABASE_URL = env('SUPABASE_URL').replace(/\/$/, '');
-const SERVICE_KEY = env('SUPABASE_SERVICE_ROLE_KEY');
+// the new secret key (sb_secret_...) goes only in the apikey header; a legacy service_role JWT is also sent as Bearer
+const SERVICE_KEY = env('SUPABASE_SECRET_KEY') || env('SUPABASE_SERVICE_ROLE_KEY');
+const KEY_HEADERS = SERVICE_KEY.startsWith('sb_') ? { apikey: SERVICE_KEY } : { apikey: SERVICE_KEY, authorization: `Bearer ${SERVICE_KEY}` };
 const MAX_BYTES = 4 * 1024 * 1024, MAX_EDGE = 2000, MAX_PIXELS = 40_000_000;
 const FORMATS = { jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' };
 const EXT = { jpg: 'jpeg', jpeg: 'jpeg', png: 'png', webp: 'webp' };
@@ -38,7 +40,7 @@ if (SUPABASE_URL && SERVICE_KEY) {
   const { default: sharp } = await import('sharp');
   const storage = (method, bucket, name, init = {}) =>
     fetch(`${SUPABASE_URL}/storage/v1/object/${encodeURIComponent(bucket)}/${name.split('/').map(encodeURIComponent).join('/')}`,
-      { method, ...init, headers: { apikey: SERVICE_KEY, authorization: `Bearer ${SERVICE_KEY}`, ...(init.headers || {}) } });
+      { method, ...init, headers: { ...KEY_HEADERS, ...(init.headers || {}) } });
 
   handlers['image.process'] = async ({ bucket, name }) => {
     if (bucket !== 'product-images' || typeof name !== 'string' || !/^products\/\d{4}\/\d{2}\/[0-9a-f-]{36}\.(jpg|png|webp)$/.test(name))

@@ -1,13 +1,13 @@
 /* Where the shop's backend lives.
    Nothing set      = offline demo: data stays in this browser only (what GitHub Pages shows today).
    PRODUCTION_SUPABASE = the real shop on Supabase (recommended): { url: 'https://<project>.supabase.co', anonKey: '<public anon key>' }
-     The anon key is PUBLIC by design (it is in every visitor's browser); all protection is on the server
+     The key is the project's PUBLISHABLE key (sb_publishable_...); it is PUBLIC by design (it is in every visitor's browser); all protection is on the server
      (database permissions, MFA, Edge Functions). NEVER put the service_role key or any secret here.
    PRODUCTION_API = the older self-hosted API (branch claude/fullstack-backend), kept for comparison.
    On a developer machine (localhost only) a page can be pointed at a local stack with
      ?supabase=http://127.0.0.1:54321&anon=<local anon key>   or   ?api=http://127.0.0.1:8080 */
 (function () {
-  var PRODUCTION_SUPABASE = { url: 'https://nuqmaiybqmuvtfnjdzvn.supabase.co', anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im51cW1haXlicW11dnRmbmpkenZuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ0Njg2MjcsImV4cCI6MjExMDA0NDYyN30.dDmFoURtnXAUSAJCVQ2W3ZsMHNgp-wdjYdHX_4-MwX8' };   // public anon key (safe in the browser)
+  var PRODUCTION_SUPABASE = { url: 'https://nuqmaiybqmuvtfnjdzvn.supabase.co', anonKey: 'sb_publishable_smPeP7e9w4PXJ4hld7a9pA_OK16py2z' };   // public anon key (safe in the browser)
   var PRODUCTION_API = '';
   var local = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
   // a developer machine or a test run never talks to the real shop database (tests must not create real orders)

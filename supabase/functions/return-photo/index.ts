@@ -2,10 +2,9 @@
 // Stores one photo for a return request in the PRIVATE "return-photos" bucket. Who may: the signed-in buyer (their own
 // token) or a guest holding the order's secret tracking token; the order must be delivered and inside the return window
 // (checked by the database: return_photo_check). Only real JPEG / PNG / WebP files up to 2 MB; at most 12 per order.
-import { clientIp, dbError, env, json, preflight, rateLimited, readBody, rpc, userFrom } from '../_shared/common.ts';
+import { clientIp, dbError, env, json, keyHeaders, preflight, rateLimited, readBody, rpc, SERVICE_KEY, userFrom } from '../_shared/common.ts';
 
 const URL_ = env('SUPABASE_URL');
-const SERVICE = env('SUPABASE_SERVICE_ROLE_KEY');
 const MAX = 2 * 1024 * 1024;
 
 // what the bytes really are (the name or the browser's claim is not trusted)
@@ -39,7 +38,7 @@ Deno.serve(async (req) => {
 
   const path = `returns/${chk.data.orderId}/${crypto.randomUUID()}.${t === 'jpeg' ? 'jpg' : t}`;
   const up = await fetch(`${URL_}/storage/v1/object/return-photos/${path}`, {
-    method: 'POST', headers: { apikey: SERVICE, authorization: `Bearer ${SERVICE}`, 'content-type': `image/${t}`, 'x-upsert': 'false' }, body: bytes,
+    method: 'POST', headers: { ...keyHeaders(SERVICE_KEY), 'content-type': `image/${t}`, 'x-upsert': 'false' }, body: bytes,
   });
   if (!up.ok) { console.error('return photo upload failed', up.status, await up.text()); return json(req, 500, { error: 'server_error', message: 'The photo could not be saved. Please try again.' }); }
   return json(req, 200, { path });

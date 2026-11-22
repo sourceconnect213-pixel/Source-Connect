@@ -11,7 +11,8 @@ const { chromium, devices } = req('playwright');
 const { authenticator } = createRequire(new URL('../supabase/tests/package.json', import.meta.url))('otplib');
 const env = Object.fromEntries(execSync('npx -y supabase@2 status -o env', { cwd: new URL('..', import.meta.url).pathname }).toString().split('\n')
   .map(l => /^([A-Z_]+)="(.*)"$/.exec(l)).filter(Boolean).map(m => [m[1], m[2]]));
-const SB = env.API_URL, ANON = env.ANON_KEY, SERVICE = env.SERVICE_ROLE_KEY;
+// E2E_KEYS=new runs the website with the new publishable key (as on the live site); default: the legacy anon JWT
+const SB = env.API_URL, ANON = process.env.E2E_KEYS === 'new' ? env.PUBLISHABLE_KEY : env.ANON_KEY, SERVICE = env.SERVICE_ROLE_KEY;
 if (!/^http:\/\/127\.0\.0\.1/.test(SB)) throw new Error('refusing to run against a non-local Supabase');
 const SITE = process.env.SITE || 'http://127.0.0.1:8000';
 const MID = '1211149', SECRET = 'local-test-secret-not-real';   // supabase/functions/.env test values

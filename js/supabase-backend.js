@@ -20,13 +20,16 @@
       else global[STORE[kind].area].setItem(STORE[kind].key, JSON.stringify({ access_token: s.access_token, refresh_token: s.refresh_token, expires_at: s.expires_at || (Math.floor(Date.now() / 1000) + (s.expires_in || 3600)) }));
     } catch (e) {}
   }
+  // Keys: a legacy anon key is a JWT and may also be sent as "Bearer"; a publishable key (sb_publishable_...) goes ONLY in
+  // the apikey header (Supabase rejects it as a Bearer token). A signed-in person's own token is always the Bearer.
+  function hdrs(token) { var h = { apikey: ANON, 'content-type': 'application/json' }; if (token) h.authorization = 'Bearer ' + token; else if (!/^sb_/.test(ANON)) h.authorization = 'Bearer ' + ANON; return h; }
   function err(status, code, message, data) { var e = new Error(message || 'Request failed'); e.status = status; e.code = code; e.data = data; return e; }
   function readJson(res) { return res.text().then(function (t) { try { return t ? JSON.parse(t) : null; } catch (e) { return null; } }); }
 
   function authFetch(path, body, token, method) {
     return fetch(URL_ + '/auth/v1' + path, {
       method: method || (body === undefined ? 'GET' : 'POST'), cache: 'no-store',
-      headers: { apikey: ANON, authorization: 'Bearer ' + (token || ANON), 'content-type': 'application/json' },
+      headers: hdrs(token),
       body: body === undefined ? undefined : JSON.stringify(body)
     }).then(function (res) {
       return readJson(res).then(function (d) {
@@ -86,7 +89,7 @@
     return (kind ? token(kind) : Promise.resolve(null)).then(function (t) {
       return fetch(URL_ + '/rest/v1/rpc/' + fn, {
         method: 'POST', cache: 'no-store', signal: ctl ? ctl.signal : undefined,
-        headers: { apikey: ANON, authorization: 'Bearer ' + (t || ANON), 'content-type': 'application/json' },
+        headers: hdrs(t),
         body: JSON.stringify(args || {})
       });
     }).then(function (res) {
@@ -103,7 +106,7 @@
   }
   function edge(name, body, kind, headers) {
     return (kind ? token(kind) : Promise.resolve(null)).then(function (t) {
-      var h = { apikey: ANON, authorization: 'Bearer ' + (t || ANON), 'content-type': 'application/json' };
+      var h = hdrs(t);
       Object.keys(headers || {}).forEach(function (k) { h[k] = headers[k]; });
       return fetch(URL_ + '/functions/v1/' + name, { method: 'POST', cache: 'no-store', headers: h, body: JSON.stringify(body || {}) });
     }).then(function (res) {

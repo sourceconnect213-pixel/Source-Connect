@@ -3,8 +3,21 @@ import { md5Upper } from './md5.ts';
 
 export const env = (k: string, d = '') => Deno.env.get(k) ?? d;
 const SUPABASE_URL = env('SUPABASE_URL');
-const SERVICE_KEY = env('SUPABASE_SERVICE_ROLE_KEY');
-const ANON_KEY = env('SUPABASE_ANON_KEY');
+// Keys: the new secret / publishable keys (SUPABASE_SECRET_KEYS / SUPABASE_PUBLISHABLE_KEYS, JSON by name) are used when the
+// platform provides them; the legacy service_role / anon JWTs only as a fallback (e.g. an older local stack).
+function namedKey(envName: string, legacy: string): string {
+  try { const k = JSON.parse(env(envName, '{}'))?.default; if (typeof k === 'string' && k) return k; } catch { /* not set */ }
+  return env(legacy);
+}
+export const SERVICE_KEY = namedKey('SUPABASE_SECRET_KEYS', 'SUPABASE_SERVICE_ROLE_KEY');
+export const ANON_KEY = namedKey('SUPABASE_PUBLISHABLE_KEYS', 'SUPABASE_ANON_KEY');
+/** Headers for a Supabase API call. A new key (sb_...) goes ONLY in apikey (it is not a JWT and is refused as a Bearer);
+ *  a legacy key is a JWT and is also sent as Bearer. A person's own token, when given, is always the Bearer. */
+export function keyHeaders(key: string, userToken?: string): Record<string, string> {
+  const h: Record<string, string> = { apikey: key };
+  if (userToken) h.authorization = `Bearer ${userToken}`; else if (!key.startsWith('sb_')) h.authorization = `Bearer ${key}`;
+  return h;
+}
 
 // Browser origins allowed to call these functions (the website and admin on Cloudflare Pages).
 const ORIGINS = env('SITE_ORIGINS', 'http://127.0.0.1:8000,http://localhost:8000').split(',').map(s => s.trim()).filter(Boolean);
@@ -33,7 +46,7 @@ export interface RpcResult { ok: boolean; status: number; data: any; error?: { c
 export async function rpc(fn: string, args: unknown, userToken?: string): Promise<RpcResult> {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
     method: 'POST',
-    headers: { apikey: userToken ? ANON_KEY : SERVICE_KEY, authorization: `Bearer ${userToken ?? SERVICE_KEY}`, 'content-type': 'application/json' },
+    headers: { ...keyHeaders(userToken ? ANON_KEY : SERVICE_KEY, userToken), 'content-type': 'application/json' },
     body: JSON.stringify(args),
   });
   const text = await res.text();
@@ -59,7 +72,7 @@ export async function userFrom(req: Request): Promise<{ id: string; token: strin
   const h = req.headers.get('authorization') ?? '';
   const token = h.startsWith('Bearer ') ? h.slice(7) : '';
   if (!token || token === ANON_KEY || isGuestKey(token)) return null;
-  const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: { apikey: ANON_KEY, authorization: `Bearer ${token}` } });
+  const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, { headers: keyHeaders(ANON_KEY, token) });
   if (!res.ok) return 'invalid';
   const u = await res.json();
   return u?.id ? { id: u.id, token } : 'invalid';

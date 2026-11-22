@@ -6,12 +6,11 @@
 //   {action:"change-own-password", currentPassword, newPassword}   (any staff member, clears the temporary-password flag)
 //   {action:"delete", id}   (main admin; rules checked in the database first, then the sign-in account is removed)
 //   {action:"customer-password", id, newPassword}   (customers.write; a customer forgot their password and no email is sent)
-import { clientIp, dbError, env, json, preflight, rateLimited, readBody, rpc, userFrom } from '../_shared/common.ts';
+import { ANON_KEY, clientIp, dbError, env, json, keyHeaders, preflight, rateLimited, readBody, rpc, SERVICE_KEY, userFrom } from '../_shared/common.ts';
 
 const AUTH = `${env('SUPABASE_URL')}/auth/v1`;
-const SERVICE = env('SUPABASE_SERVICE_ROLE_KEY');
 const admin = (path: string, method: string, body?: unknown) =>
-  fetch(`${AUTH}/admin${path}`, { method, headers: { apikey: SERVICE, authorization: `Bearer ${SERVICE}`, 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
+  fetch(`${AUTH}/admin${path}`, { method, headers: { ...keyHeaders(SERVICE_KEY), 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
 function passwordProblem(pw: unknown, username = ''): string | null {
   if (typeof pw !== 'string' || pw.length < 12) return 'Use at least 12 characters.';
   if (pw.length > 200) return 'Password is too long.';
@@ -30,12 +29,12 @@ Deno.serve(async (req) => {
   let b: any; try { b = JSON.parse((await readBody(req, 10_000)) ?? ''); } catch { return json(req, 400, { error: 'bad_request', message: 'The request could not be read.' }); }
 
   if (b?.action === 'change-own-password') {
-    const me = await (await fetch(`${AUTH}/user`, { headers: { apikey: env('SUPABASE_ANON_KEY'), authorization: `Bearer ${caller.token}` } })).json();
+    const me = await (await fetch(`${AUTH}/user`, { headers: keyHeaders(ANON_KEY, caller.token) })).json();
     if (me?.app_metadata?.kind !== 'staff') return json(req, 403, { error: 'forbidden', message: 'Not a staff account.' });
     const problem = passwordProblem(b.newPassword, String(me.email ?? '').split('@')[0]);
     if (problem) return json(req, 400, { error: 'bad_request', message: problem });
     if (b.newPassword === b.currentPassword) return json(req, 400, { error: 'bad_request', message: 'Choose a different password.' });
-    const check = await fetch(`${AUTH}/token?grant_type=password`, { method: 'POST', headers: { apikey: env('SUPABASE_ANON_KEY'), 'content-type': 'application/json' }, body: JSON.stringify({ email: me.email, password: String(b.currentPassword ?? '') }) });
+    const check = await fetch(`${AUTH}/token?grant_type=password`, { method: 'POST', headers: { ...keyHeaders(ANON_KEY), 'content-type': 'application/json' }, body: JSON.stringify({ email: me.email, password: String(b.currentPassword ?? '') }) });
     if (!check.ok) return json(req, 400, { error: 'bad_request', message: 'Your current password is not correct.' });
     const u = await admin(`/users/${me.id}`, 'PUT', { password: b.newPassword, app_metadata: { ...me.app_metadata, must_change_password: false } });
     if (!u.ok) return json(req, 400, { error: 'bad_request', message: (await u.json())?.msg ?? 'Password not accepted.' });
