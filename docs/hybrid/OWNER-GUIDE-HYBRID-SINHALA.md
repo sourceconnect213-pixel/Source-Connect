@@ -151,3 +151,24 @@
      - Order eke total ekata wada refund karanna bæ.
      - Mulu order ekama refund kalama order eka "Refunded" wenawa.
 - Hæma step ekakma Audit Log eke saha order history eke record wenawa.
+
+## Security (2026-11-22 karapu wenas saha oya karanna ona dewal)
+- **Karala iwarai:**
+  - Website eka **publishable key** eken saha server functions **secret key** eken wada karanawa. Parana `anon` / `service_role` keys **off** karala.
+  - Parana HS256 JWT secret eka **revoke** kala. Dæn login tokens sign karanne extract karanna bæri ES256 key eken.
+  - Strict **Content-Security-Policy** eka dæmma.
+  - XSS attack test eka hama deployment ekakatama run wenawa.
+- **Oya karanna ona dewal:**
+  1. **Staff second step → Authenticator app:**
+     - Admin → Staff & Roles → Second sign-in step → Authenticator app → Save.
+     - Oyage account eke dæntath app eka thiyenawa.
+     - Co-admin ta: Edit → Verify with → Authenticator app.
+  2. **Database:** Supabase → Project Settings → Database:
+     - **Enforce SSL** on karanna.
+     - **Network Restrictions** eke direct connections nawaththanna. VPS eka hæduwama eke IP eka witharak allow karanna.
+  3. **CAPTCHA (Cloudflare Turnstile):**
+     - Cloudflare → Turnstile → Add widget → domain `source-connect-915.pages.dev` (passe oyage domain ekath) → mode **Managed**.
+     - **Site key** eka mata denna. Eka public, chat ekata danna puluwan. Mama eka website ekata dala deploy karannam.
+     - Ita passe **witharak**: Supabase → Authentication → Attack Protection → Enable CAPTCHA → Turnstile → **Secret key** eka ehe danna.
+     - Secret key eka chat ekata danna epa. Ordera wenas kaloth login wenna bæri wenawa.
+  4. Oyage **Supabase, Cloudflare, GitHub accounts** wala two-step login on karanna.
