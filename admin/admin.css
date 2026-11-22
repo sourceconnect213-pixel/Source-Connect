@@ -485,3 +485,4 @@ body.pv-dragging iframe { pointer-events: none; }
 .rt-refund-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
 .rt-refund-row label { display: grid; gap: 4px; font-size: 13px; }
 .rt-refund-row input { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; width: 180px; max-width: 100%; }
+.captcha-box { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 400; }

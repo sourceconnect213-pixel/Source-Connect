@@ -816,3 +816,4 @@ img.ia.ia-in { animation: iaIn .75s cubic-bezier(.22, 1, .36, 1) backwards; }
 .ret-form label.ret-item select { width: auto; flex: none; padding: 6px 10px; }
 .ret-form label.chk { display: inline-flex; align-items: center; gap: 8px; margin: 8px 18px 0 0; font-size: 14px; color: var(--text); }
 .ret-form input[type=file] { padding: 8px; }
+.captcha-box { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 400; }

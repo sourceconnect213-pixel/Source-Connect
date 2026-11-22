@@ -34,7 +34,7 @@ Deno.serve(async (req) => {
     const problem = passwordProblem(b.newPassword, String(me.email ?? '').split('@')[0]);
     if (problem) return json(req, 400, { error: 'bad_request', message: problem });
     if (b.newPassword === b.currentPassword) return json(req, 400, { error: 'bad_request', message: 'Choose a different password.' });
-    const check = await fetch(`${AUTH}/token?grant_type=password`, { method: 'POST', headers: { ...keyHeaders(ANON_KEY), 'content-type': 'application/json' }, body: JSON.stringify({ email: me.email, password: String(b.currentPassword ?? '') }) });
+    const check = await fetch(`${AUTH}/token?grant_type=password`, { method: 'POST', headers: { ...keyHeaders(ANON_KEY), 'content-type': 'application/json' }, body: JSON.stringify({ email: me.email, password: String(b.currentPassword ?? ''), ...(b.captchaToken ? { gotrue_meta_security: { captcha_token: String(b.captchaToken).slice(0, 4096) } } : {}) }) });
     if (!check.ok) return json(req, 400, { error: 'bad_request', message: 'Your current password is not correct.' });
     const u = await admin(`/users/${me.id}`, 'PUT', { password: b.newPassword, app_metadata: { ...me.app_metadata, must_change_password: false } });
     if (!u.ok) return json(req, 400, { error: 'bad_request', message: (await u.json())?.msg ?? 'Password not accepted.' });

@@ -4,8 +4,8 @@
   Referrer-Policy: strict-origin-when-cross-origin
   Permissions-Policy: camera=(), microphone=(), geolocation=()
   Strict-Transport-Security: max-age=31536000
-  # Only this site's own scripts may run (stops injected scripts); data only to our Supabase project; PayHere for payment forms.
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://nuqmaiybqmuvtfnjdzvn.supabase.co; frame-src 'self'; frame-ancestors 'self'; form-action 'self' https://sandbox.payhere.lk https://www.payhere.lk; base-uri 'self'; object-src 'none'; worker-src 'self' blob:
+  # Only this site's own scripts (and Cloudflare's bot check) may run; data only to our Supabase project; PayHere for payment forms.
+  Content-Security-Policy: default-src 'self'; script-src 'self' https://challenges.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://nuqmaiybqmuvtfnjdzvn.supabase.co https://challenges.cloudflare.com; frame-src 'self' https://challenges.cloudflare.com; frame-ancestors 'self'; form-action 'self' https://sandbox.payhere.lk https://www.payhere.lk; base-uri 'self'; object-src 'none'; worker-src 'self' blob:
 /admin/*
   Cache-Control: no-store
   X-Robots-Tag: noindex

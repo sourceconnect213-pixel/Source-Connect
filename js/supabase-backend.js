@@ -66,8 +66,14 @@
     return authFetch('/token?grant_type=refresh_token', { refresh_token: s.refresh_token }).then(function (n) { save(kind, n); return n.access_token; },
       function () { save(kind, null); return null; });
   }
+  // bot protection: when it is on, Supabase Auth needs a fresh Turnstile token with every sign-up / sign-in
+  function withCaptcha(body) {
+    var C = global.SCGCaptcha;
+    if (!C || !C.on) return Promise.resolve(body);
+    return C.token().then(function (t) { body.gotrue_meta_security = { captcha_token: t }; return body; });
+  }
   function signIn(kind, email, password) {
-    return authFetch('/token?grant_type=password', { email: email, password: password }).then(function (s) { save(kind, s); return s; });
+    return withCaptcha({ email: email, password: password }).then(function (b) { return authFetch('/token?grant_type=password', b); }).then(function (s) { save(kind, s); return s; });
   }
   function signOut(kind) {
     return token(kind).then(function (t) { save(kind, null); if (t) return authFetch('/logout', {}, t).catch(function () {}); });
@@ -207,7 +213,8 @@
     if (path === '/customers/me' && method === 'PUT') return rpc('update_my_profile', { p_data: body }, 'customer');
     if (path === '/customers/login') return signIn('customer', body.email, body.password).then(function () { return call('GET', '/customers/me'); });
     if (path === '/account/avatar') return setAvatar(body.file || null, body.previous || null);
-    if (path === '/customers/register') return authFetch('/signup', { email: body.email, password: body.password, data: { name: body.name, phone: body.phone || '', phone2: body.phone2 || '', address: body.address || null } })
+    if (path === '/customers/register') return withCaptcha({ email: body.email, password: body.password, data: { name: body.name, phone: body.phone || '', phone2: body.phone2 || '', address: body.address || null } })
+      .then(function (b) { return authFetch('/signup', b); })
       .then(function (s) { if (s && s.access_token) { save('customer', s); return call('GET', '/customers/me'); } return { customer: { name: body.name, email: body.email, verified: false, pendingConfirmation: true } }; });
     if (path === '/customers/logout') return signOut('customer').then(function () { return { ok: true }; });
     if (path === '/customers/password-reset/request') return authFetch('/recover?redirect_to=' + encodeURIComponent(location.origin + location.pathname), { email: body.email }).then(function () { return { ok: true }; });
@@ -227,7 +234,8 @@
     });
     if (path === '/admin/auth/pin') return rpc('staff_verify_pin', { p_pin: String(body.pin || '') }, 'staff');
     if (path === '/admin/auth/logout') return signOut('staff').then(function () { return { ok: true }; });
-    if (path === '/admin/auth/password') return edge('admin-staff', { action: 'change-own-password', currentPassword: body.currentPassword, newPassword: body.newPassword }, 'staff');
+    if (path === '/admin/auth/password') return withCaptcha({ action: 'change-own-password', currentPassword: body.currentPassword, newPassword: body.newPassword })
+      .then(function (b) { if (b.gotrue_meta_security) { b.captchaToken = b.gotrue_meta_security.captcha_token; delete b.gotrue_meta_security; } return edge('admin-staff', b, 'staff'); });
     // ---- admin catalogue ----
     if (path === '/admin/state') return rpc('admin_state', {}, 'staff');
     if (path === '/admin/products' && method === 'POST') return rpc('admin_save_product', { p_slug: null, p_data: body }, 'staff');
