@@ -653,6 +653,39 @@ check('attack text on the website (reviews, order, return): shown as text, never
 check('the review shows the attack code as plain text', (await xp.evaluate(async () => { location.hash = 'p/bags-7'; await new Promise(r => setTimeout(r, 2500)); return document.getElementById('revBox')?.textContent || ''; })).includes('<img src=x onerror='));
 await xc.close();
 
+// 10h. "Co-admins" panel: add with name/username/password/PIN, new PIN, remove with one confirm
+sql(`DELETE FROM app.staff_users WHERE username = 'storehelper'`); sql(`DELETE FROM auth.users WHERE email = 'storehelper@staff.invalid'`);
+await ap.evaluate(() => { location.hash = 'dashboard'; }); await ap.waitForTimeout(600);
+await ap.evaluate(() => { location.hash = 'staff'; }); await ap.waitForSelector('#coPanel', { timeout: 15000 });
+check('Co-admins panel is the first thing on Staff & Roles', await ap.evaluate(() => document.querySelector('#view > .panel')?.id === 'coPanel'));
+await ap.click('#coAdd'); await ap.waitForSelector('#coF');
+check('add co-admin asks only name, username, password and PIN', (await ap.$$eval('#coF input', l => l.map(i => i.name))).join(',') === 'displayName,username,pw,pin,pin2');
+await ap.fill('#coF [name=displayName]', 'Store Helper'); await ap.fill('#coF [name=username]', 'storehelper'); await ap.fill('#coF [name=pw]', 'Helper-Pass-2026');
+await ap.fill('#coF [name=pin]', '5829'); await ap.fill('#coF [name=pin2]', '5829'); await ap.click('#coF button.primary');
+await ap.waitForFunction(() => /Store Helper/.test(document.getElementById('coPanel')?.textContent || ''), null, { timeout: 15000 });
+const helperId = sql(`SELECT id FROM app.staff_users WHERE username = 'storehelper'`);
+check('co-admin created: co-admin role, PIN sign-in, PIN saved', sql(`SELECT (SELECT string_agg(r.code, ',') FROM app.staff_roles sr JOIN app.roles r ON r.id = sr.role_id WHERE sr.staff_id = u.id) || '|' || u.second_step || '|' || (SELECT count(*) FROM app.staff_pins p WHERE p.staff_id = u.id) FROM app.staff_users u WHERE u.id = '${helperId}'`) === 'co_admin|pin|1');
+await ap.screenshot({ path: OUT + '/sb-admin-coadmins.jpg', type: 'jpeg', quality: 70 });
+await ap.click(`[data-co-pin="${helperId}"]`); await ap.waitForSelector('#coPinF'); await ap.fill('#coPinF [name=pin]', '6930'); await ap.fill('#coPinF [name=pin2]', '6930'); await ap.click('#coPinF button.primary'); await ap.waitForTimeout(1500);
+sql(`UPDATE app.security_settings SET require_staff_mfa = true`);
+const chC = await ctx(); const chp = await page(chC, 'helper');
+await chp.goto(withSb('admin/')); await chp.waitForSelector('input[name=user]');
+await chp.fill('input[name=user]', 'storehelper'); await chp.fill('input[name=pass]', 'Helper-Pass-2026'); await chp.click('#loginForm button:not(.pw-eye)');
+await chp.waitForSelector('#loginForm input[name=cur]', { timeout: 15000 });
+await chp.fill('#loginForm [name=cur]', 'Helper-Pass-2026'); await chp.fill('#loginForm [name=pw]', 'Helper-Own-Pass-9'); await chp.click('#loginForm button.primary');
+await chp.waitForSelector('input[name=user]', { timeout: 20000 });
+await chp.fill('input[name=user]', 'storehelper'); await chp.fill('input[name=pass]', 'Helper-Own-Pass-9'); await chp.click('#loginForm button:not(.pw-eye)');
+await chp.waitForSelector('#loginForm input[name=pin]', { timeout: 15000 }); await chp.fill('#loginForm input[name=pin]', '6930'); await chp.click('#pinGo');
+await chp.waitForSelector('#shell:not([hidden])', { timeout: 20000 }); await chp.waitForTimeout(1200);
+check('the new co-admin signs in (username, own password, NEW PIN) and gets the store menu', await chp.isVisible('#sideNav a[data-v=products]') && !(await chp.isVisible('#sideNav a[data-v=staff]')));
+await chC.close();
+sql(`UPDATE app.security_settings SET require_staff_mfa = false`);
+ap.once('dialog', d => d.accept()); await ap.click(`[data-co-del="${helperId}"]`);
+await ap.waitForFunction(() => !/Store Helper/.test(document.getElementById('coPanel')?.textContent || ''), null, { timeout: 15000 });
+check('Remove: one confirm, the co-admin and their sign-in are gone', sql(`SELECT count(*) FROM app.staff_users WHERE id = '${helperId}'`) === '0' && sql(`SELECT count(*) FROM auth.users WHERE id = '${helperId}'`) === '0');
+const loginGone = await (await fetch(`${SB}/auth/v1/token?grant_type=password`, { method: 'POST', headers: { apikey: ANON, 'content-type': 'application/json' }, body: JSON.stringify({ email: 'storehelper@staff.invalid', password: 'Helper-Own-Pass-9' }) })).json();
+check('the removed co-admin can no longer sign in', !loginGone.access_token);
+
 // 11. usage page (main admin)
 await ap.evaluate(() => { location.hash = 'usage'; }); await ap.waitForSelector('.use-row', { timeout: 15000 });
 const use = await ap.$$eval('.use-row .use-head', l => l.map(x => x.textContent.replace(/\s+/g, ' ').trim()));

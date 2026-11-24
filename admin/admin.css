@@ -486,3 +486,12 @@ body.pv-dragging iframe { pointer-events: none; }
 .rt-refund-row label { display: grid; gap: 4px; font-size: 13px; }
 .rt-refund-row input { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; font: inherit; width: 180px; max-width: 100%; }
 .captcha-box { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 400; }
+
+/* co-admins: add / remove in one place */
+.co-panel { border: 2px solid var(--navy); }
+.co-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.co-head h3 { margin: 0; }
+.co-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 0; border-top: 1px solid var(--line); }
+.co-who { display: grid; gap: 2px; min-width: 0; }
+.co-who small { overflow-wrap: anywhere; }
+.co-act { display: flex; gap: 6px; flex-wrap: wrap; }

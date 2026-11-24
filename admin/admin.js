@@ -1959,7 +1959,18 @@
         var stepRadios = function (sel) { return '<div class="full"><b>Verify with</b> <small class="muted">(asked after the password)</small><br>' +
           '<label class="chk"><input type="radio" name="step" value="pin"' + (sel === 'pin' ? ' checked' : '') + '> PIN</label> ' +
           '<label class="chk"><input type="radio" name="step" value="totp"' + (sel === 'totp' ? ' checked' : '') + '> Authenticator app</label></div>'; };
-        v.innerHTML = reqHTML + '<div class="panel" style="padding:0"><div class="table-wrap"><table class="table"><thead><tr><th>Name</th><th>Roles</th><th>Departments</th><th>Status</th><th>Last sign-in</th><th></th></tr></thead><tbody>' + r.staff.map(function (u) {
+        // ---- Co-admins: the simple way to add / remove the people who run the store ----
+        var cos = r.staff.filter(function (u) { return u.roles.indexOf('co_admin') > -1; });
+        var coHTML = '<div class="panel co-panel" id="coPanel"><div class="co-head"><h3>Co-admins <small>' + cos.length + '</small></h3><button class="btn primary" id="coAdd">+ Add co-admin</button></div>' +
+          '<p class="muted" style="margin:0 0 10px;font-size:13px">Co-admins run the store: products, photos, banners, offers, promo codes and Sales &amp; Profit. Anything more only when you approve it.</p>' +
+          (cos.length ? cos.map(function (u) {
+            var pin = (u.second_step || si.secondStep) === 'pin';
+            return '<div class="co-row"><div class="co-who"><b>' + esc(u.display_name) + '</b><small class="muted">' + esc(u.username) + ' · signs in with ' + (pin ? 'password + PIN' : 'password + authenticator app') +
+                (u.status !== 'active' ? ' · <b style="color:var(--red)">disabled</b>' : '') + ' · last sign-in ' + (u.last_login_at ? when(u.last_login_at) : 'never') + '</small></div>' +
+              '<div class="co-act"><button class="btn sm" data-co-pw="' + u.id + '">New password</button>' + (pin ? '<button class="btn sm" data-co-pin="' + u.id + '">New PIN</button>' : '') +
+              '<button class="btn sm danger" data-co-del="' + u.id + '">Remove</button></div></div>';
+          }).join('') : '<p class="muted" style="margin:0">No co-admins yet. Add one with the button above.</p>') + '</div>';
+        v.innerHTML = coHTML + reqHTML + '<div class="panel" style="padding:0"><div class="table-wrap"><table class="table"><thead><tr><th>Name</th><th>Roles</th><th>Departments</th><th>Status</th><th>Last sign-in</th><th></th></tr></thead><tbody>' + r.staff.map(function (u) {
           var ex = ac.extra[u.id] || [];
           return '<tr><td><b>' + esc(u.display_name) + '</b><br><small class="muted">' + esc(u.username) + ' · ' + (stepOf(u) === 'pin' ? 'PIN' : 'Authenticator') + '</small></td><td>' + u.roles.map(esc).join(', ') + (ex.length ? '<br><small class="muted">+ approved: ' + ex.map(function (c) { return esc(permName(c)); }).join(', ') + '</small>' : '') + '</td><td>' + (u.shops.length ? u.shops.map(esc).join(', ') : 'All') + '</td><td>' + esc(u.status) + (u.locked_until && new Date(u.locked_until) > new Date() ? ' · locked' : '') + (u.must_change_password ? ' · temp password' : '') + '</td><td><small>' + when(u.last_login_at) + '</small></td>' +
             '<td style="white-space:nowrap"><button class="btn sm" data-edit="' + u.id + '">Edit</button> <button class="btn sm" data-pin="' + u.id + '">' + (withPin.indexOf(u.id) > -1 ? 'Change PIN' : 'Set PIN') + '</button></td></tr>';
@@ -2002,6 +2013,42 @@
             if (step === 'pin') body.pin = E.pin.value;
             SCG.api('POST', '/admin/staff', body)
               .then(function () { toast('Staff account created. Sign in with the username ' + body.username); closeModal(); route(); }, fail); };
+        };
+        var coFind = function (id) { return cos.filter(function (u) { return u.id === id; })[0]; };
+        var coPinIn = function (n) { return '<input name="' + n + '" type="password" inputmode="numeric" pattern="[0-9]{4,8}" maxlength="8" required autocomplete="new-password">'; };
+        $('#coAdd').onclick = function () {
+          openModal('Add co-admin', '<form class="form" id="coF">' +
+            '<label class="full">Full name<input name="displayName" required maxlength="80"></label>' +
+            '<label>Username <small class="muted">(to sign in)</small><input name="username" required pattern="[A-Za-z0-9._\\-]{3,40}" title="3 to 40 letters, numbers, . _ -" autocomplete="off" autocapitalize="none" spellcheck="false"></label>' +
+            '<label>Password <small class="muted">(12+ letters and numbers)</small><input name="pw" required minlength="12" autocomplete="new-password"></label>' +
+            '<label>PIN <small class="muted">(4–8 digits)</small>' + coPinIn('pin') + '</label><label>PIN again <small class="muted">(the same)</small>' + coPinIn('pin2') + '</label>' +
+            '<p class="full muted" style="margin:0;font-size:13px">Give the username, password and PIN to the person yourself. At the first sign-in they choose their own password.</p>' +
+            '<div class="form-foot"><button class="btn primary">Add co-admin</button></div></form>');
+          $('#coF').onsubmit = function (e) { e.preventDefault(); var E = e.target.elements, btn = e.target.querySelector('button.primary');
+            if (E.pin.value !== E.pin2.value) { toast('The two PINs are not the same'); return; }
+            btn.disabled = true;
+            SCG.api('POST', '/admin/staff', { username: E.username.value.trim(), displayName: E.displayName.value.trim(), email: '', roles: ['co_admin'], shops: [], temporaryPassword: E.pw.value, secondStep: 'pin', pin: E.pin.value })
+              .then(function () { toast('Co-admin added. Sign-in name: ' + E.username.value.trim()); closeModal(); route(); }, function (err) { btn.disabled = false; fail(err); });
+          };
+        };
+        $('#coPanel').onclick = function (e) {
+          var del = e.target.closest('[data-co-del]'), pw = e.target.closest('[data-co-pw]'), pn = e.target.closest('[data-co-pin]');
+          if (del) { e.stopPropagation(); var u = coFind(del.dataset.coDel);
+            if (!confirm('Remove co-admin ' + u.display_name + ' (' + u.username + ')?\n\nThey can no longer sign in. Their past work (orders, stock changes, audit log) is kept.')) return;
+            del.disabled = true;
+            SCG.api('DELETE', '/admin/staff/' + u.id).then(function () { toast(u.display_name + ' removed'); route(); }, function (err) { del.disabled = false; fail(err); });
+            return; }
+          if (pw) { e.stopPropagation(); var up = coFind(pw.dataset.coPw);
+            openModal('New password — ' + up.display_name, '<form class="form" id="coPwF"><label class="full">New password <small class="muted">(12+ letters and numbers; they change it at their next sign-in)</small><input name="pw" required minlength="12" autocomplete="new-password"></label><div class="form-foot"><button class="btn primary">Save password</button></div></form>');
+            $('#coPwF').onsubmit = function (ev) { ev.preventDefault();
+              SCG.api('PUT', '/admin/staff/' + up.id, { resetPassword: ev.target.elements.pw.value }).then(function () { toast('New password saved. Tell it to ' + up.display_name); closeModal(); }, fail); };
+            return; }
+          if (pn) { e.stopPropagation(); var uq = coFind(pn.dataset.coPin);
+            openModal('New PIN — ' + uq.display_name, '<form class="form" id="coPinF"><label>New PIN <small class="muted">(4–8 digits)</small>' + coPinIn('pin') + '</label><label>PIN again' + coPinIn('pin2') + '</label><div class="form-foot"><button class="btn primary">Save PIN</button></div></form>');
+            $('#coPinF').onsubmit = function (ev) { ev.preventDefault(); var E = ev.target.elements;
+              if (E.pin.value !== E.pin2.value) { toast('The two PINs are not the same'); return; }
+              SCG.api('PUT', '/admin/staff/' + uq.id + '/pin', { pin: E.pin.value }).then(function () { toast('New PIN saved. Tell it to ' + uq.display_name); closeModal(); route(); }, fail); };
+            return; }
         };
         $('#siF').onsubmit = function (e) { e.preventDefault(); var mode = (e.target.querySelector('input[name=mode]:checked') || {}).value;
           SCG.api('PUT', '/admin/sign-in', { secondStep: mode }).then(function () { toast(mode === 'pin' ? 'Staff now sign in with password + PIN' : 'Staff now sign in with password + authenticator app'); route(); }, fail); };
