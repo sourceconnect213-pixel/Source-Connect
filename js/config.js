@@ -11,7 +11,7 @@
   var PRODUCTION_API = '';
   // Cloudflare Turnstile SITE key (public). Empty = bot protection off. Turn it on in Supabase (Auth > Attack Protection)
   // only AFTER this key is live, or sign-ins will be refused.
-  var TURNSTILE_SITE_KEY = '';
+  var TURNSTILE_SITE_KEY = '0x4AAAAAAGQchtxia8fsHElb';
   var local = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
   // a developer machine or a test run never talks to the real shop database (tests must not create real orders)
   var sb = PRODUCTION_SUPABASE.url && !local ? PRODUCTION_SUPABASE : null, api = local ? '' : PRODUCTION_API;
