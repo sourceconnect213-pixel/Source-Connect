@@ -495,3 +495,4 @@ body.pv-dragging iframe { pointer-events: none; }
 .co-who { display: grid; gap: 2px; min-width: 0; }
 .co-who small { overflow-wrap: anywhere; }
 .co-act { display: flex; gap: 6px; flex-wrap: wrap; }
+.captcha-box.need::before { content: 'Tick the box to continue'; display: block; margin-bottom: 6px; padding: 5px 10px; border-radius: 6px; background: rgba(5,11,28,.85); color: #fff; font-size: 13px; text-align: center; }

@@ -817,3 +817,4 @@ img.ia.ia-in { animation: iaIn .75s cubic-bezier(.22, 1, .36, 1) backwards; }
 .ret-form label.chk { display: inline-flex; align-items: center; gap: 8px; margin: 8px 18px 0 0; font-size: 14px; color: var(--text); }
 .ret-form input[type=file] { padding: 8px; }
 .captcha-box { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 400; }
+.captcha-box.need::before { content: 'Tick the box to continue'; display: block; margin-bottom: 6px; padding: 5px 10px; border-radius: 6px; background: rgba(5,11,28,.85); color: #fff; font-size: 13px; text-align: center; }

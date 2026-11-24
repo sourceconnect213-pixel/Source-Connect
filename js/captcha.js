@@ -31,7 +31,10 @@
         wid = ts.render(box, { sitekey: KEY, appearance: 'interaction-only', 'refresh-expired': 'manual',
           callback: function (t) { finish(ok, t); },
           'error-callback': function () { finish(no, new Error('The security check failed. Please try again.')); return true; },
-          'expired-callback': function () { finish(no, new Error('The security check expired. Please try again.')); } });
+          'expired-callback': function () { finish(no, new Error('The security check expired. Please try again.')); },
+          // Cloudflare asks this visitor to tick the box: say so above it
+          'before-interactive-callback': function () { box.classList.add('need'); },
+          'after-interactive-callback': function () { box.classList.remove('need'); } });
       });
     });
   }
