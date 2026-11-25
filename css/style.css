@@ -818,3 +818,13 @@ img.ia.ia-in { animation: iaIn .75s cubic-bezier(.22, 1, .36, 1) backwards; }
 .ret-form input[type=file] { padding: 8px; }
 .captcha-box { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 400; }
 .captcha-box.need::before { content: 'Tick the box to continue'; display: block; margin-bottom: 6px; padding: 5px 10px; border-radius: 6px; background: rgba(5,11,28,.85); color: #fff; font-size: 13px; text-align: center; }
+
+/* "Continue with Google" on the account page */
+.g-slot { display: grid; gap: 10px; }
+.g-slot[hidden] { display: none; }
+.g-btn { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; padding: 11px 20px; border-radius: 8px; background: #fff; color: #1f1f1f; border: 1px solid #747775; font: inherit; font-weight: 600; font-size: 14px; cursor: pointer; }
+.g-btn:hover { background: #f6f8fc; }
+.g-btn:disabled { opacity: .6; cursor: wait; }
+.g-btn svg { flex: none; }
+.g-or { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; }
+.g-or::before, .g-or::after { content: ""; flex: 1; border-top: 1px solid var(--line, #e5e7eb); }

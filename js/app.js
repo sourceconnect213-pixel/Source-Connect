@@ -1047,13 +1047,15 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
     var me = SCG.customer;
     if (!me) {
       var regPhoto = null, s = db.settings || {};
+      // "Continue with Google": stays hidden until the owner switches Google on in Supabase
+      var gSlot = '<div class="full g-slot" hidden><button type="button" class="g-btn" data-google><svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.6 13.2l7.9 6.2C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.8c4.3-4 6.9-9.9 6.9-17.2z"/><path fill="#FBBC05" d="M10.5 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.2C.9 16.6 0 20.2 0 24s.9 7.4 2.6 10.8l7.9-6.2z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.4-5.8c-2.1 1.4-4.8 2.3-8.5 2.3-6.3 0-11.6-4.1-13.5-9.9l-7.9 6.2C6.6 42.6 14.6 48 24 48z"/></svg><span>Continue with Google</span></button><div class="g-or"><span>or</span></div></div>';
       app.innerHTML = '<div class="wrap"><div class="crumbs"><a href="#">Home</a>›<span>My account</span></div><div class="acct-grid">' +
-        '<form class="panel form" id="loginF"><h3>Sign in</h3><label class="full">Email<input name="email" type="email" required autocomplete="email"></label>' +
+        '<form class="panel form" id="loginF"><h3>Sign in</h3>' + gSlot + '<label class="full">Email<input name="email" type="email" required autocomplete="email"></label>' +
           '<label class="full">Password<input name="password" type="password" required autocomplete="current-password"></label>' +
           '<button class="btn navy full" style="grid-column:1/-1">Sign in</button>' +
           '<p class="full muted" style="margin:0;font-size:13px">Forgot your password? Call' + (s.whatsapp ? ' or WhatsApp' : '') + ' us on <b>' + esc(s.phone || '') + '</b> and we will set a new one for you.</p>' +
           '<p class="full co-msg" id="loginMsg" style="margin:0;color:var(--red)"></p></form>' +
-        '<form class="panel form" id="regF"><h3>Create an account</h3><p class="full" style="margin:0;color:var(--muted);font-size:13px">Optional: you can always check out as a guest. An account keeps your orders, address and reviews together.</p>' +
+        '<form class="panel form" id="regF"><h3>Create an account</h3><p class="full" style="margin:0;color:var(--muted);font-size:13px">Optional: you can always check out as a guest. An account keeps your orders, address and reviews together.</p>' + gSlot +
           '<label class="full">Full name<input name="name" required minlength="2" maxlength="80" autocomplete="name"></label>' +
           '<label class="full">Email<input name="email" type="email" required maxlength="120" autocomplete="email"></label>' +
           '<label>Phone number<input name="phone" type="tel" required maxlength="20" ' + PHONE + ' autocomplete="tel"></label>' +
@@ -1085,6 +1087,17 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
           .then(done, function (err) { btn.disabled = false; $('#regMsg').textContent = err.message; });
       };
       if (window.SCG_AUTH_NOTICE) { $('#loginMsg').textContent = window.SCG_AUTH_NOTICE; window.SCG_AUTH_NOTICE = null; }   // e.g. an email link that has expired
+      var SBk = window.SCGSupabase;
+      if (SBk && SBk.providers) SBk.providers().then(function (ext) {
+        if (!ext || ext.google !== true) return;
+        Array.prototype.forEach.call(app.querySelectorAll('.g-slot'), function (slot) {
+          slot.hidden = false;
+          slot.querySelector('[data-google]').onclick = function () {
+            var b = this; b.disabled = true;
+            SBk.oauthStart('google').catch(function (err) { b.disabled = false; $('#loginMsg').textContent = err.message; });
+          };
+        });
+      });
       return;
     }
     var newPhoto = null;

@@ -214,8 +214,9 @@
   SCG.whenSynced = function () { return queue; };
 
   /* ---------------- start-up ---------------- */
-  if (SB && !IS_ADMIN) SB.takeAuthRedirect();   // email links (confirm / reset) carry a session in the address
-  SCG.ready = IS_ADMIN ? Promise.resolve() : Promise.all([SCG.refresh(), SCG.loadCustomer()]);
+  // email links (confirm / reset) carry a session in the address; a Google sign-in comes back with a one-time code to swap first
+  var authBack = SB && !IS_ADMIN ? SB.takeAuthRedirect() : null;
+  SCG.ready = IS_ADMIN ? Promise.resolve() : Promise.all([SCG.refresh(), Promise.resolve(authBack).then(function () { return SCG.loadCustomer(); })]);
   SCG.whenReady = function (fn) {
     SCG.ready.then(fn, function (err) {
       var app = document.getElementById('app');

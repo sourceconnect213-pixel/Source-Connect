@@ -310,7 +310,58 @@
   }
 
   // Links from Supabase Auth emails land on the website with a session in the address (#access_token=...&type=...)
+  // ---------- Google sign-in (OAuth with PKCE: the code that comes back is useless without the secret kept in this tab) ----------
+  var PKCE_KEY = 'scg_sb_pkce_v1', provCache = null;
+  function b64url(bytes) { var t = ''; for (var i = 0; i < bytes.length; i++) t += String.fromCharCode(bytes[i]); return btoa(t).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+  // which sign-in providers the owner has switched on in Supabase (Authentication > Sign In / Providers)
+  function providers() {
+    if (!provCache) provCache = authFetch('/settings').then(function (d) { return (d && d.external) || {}; }, function () { provCache = null; return {}; });
+    return provCache;
+  }
+  function oauthStart(provider) {
+    if (!global.crypto || !global.crypto.subtle || !global.TextEncoder) return Promise.reject(err(0, 'unsupported', 'This browser cannot use Google sign-in. Please sign in with your email and password.'));
+    var verifier = b64url(global.crypto.getRandomValues(new Uint8Array(48)));   // 64 characters (the standard allows 43 to 128)
+    return global.crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)).then(function (hash) {
+      try { global.sessionStorage.setItem(PKCE_KEY, JSON.stringify({ v: verifier, p: provider, at: Date.now() })); }
+      catch (e) { throw err(0, 'storage', 'This browser is blocking site storage, so Google sign-in cannot finish. Please sign in with your email and password.'); }
+      var q = new URLSearchParams({ provider: provider, redirect_to: location.origin + location.pathname, code_challenge: b64url(new Uint8Array(hash)), code_challenge_method: 's256' });
+      location.assign(URL_ + '/auth/v1/authorize?' + q.toString());
+      return new Promise(function () {});   // the page is leaving
+    });
+  }
+  // back from Google: swap the one-time code (plus the secret kept in this tab) for a session
+  function takeOAuthReturn() {
+    var qs = new URLSearchParams(location.search), h = location.hash, pk = null;
+    var hq = new URLSearchParams(h.replace(/^#/, ''));
+    var hasErr = qs.has('error') || qs.has('error_code') || (/(^#|&)error(_code)?=/.test(h) && !/access_token=/.test(h));
+    try { pk = JSON.parse(global.sessionStorage.getItem(PKCE_KEY) || 'null'); } catch (e) { pk = null; }
+    var code = qs.get('code');
+    if (!(code && /^[0-9a-f-]{20,64}$/i.test(code)) && !(pk && hasErr)) return null;
+    try { global.sessionStorage.removeItem(PKCE_KEY); } catch (e) {}
+    history.replaceState(null, '', location.pathname + '#account');
+    var name = 'Google';
+    if (!code) {
+      var ec = qs.get('error') || hq.get('error') || '', ed = qs.get('error_description') || hq.get('error_description') || '';
+      global.SCG_AUTH_NOTICE = ec === 'access_denied' && !/database|account_exists/i.test(ed) ? name + ' sign-in was cancelled.'
+        : name + ' sign-in did not work. If you already have an account with this email, please sign in with your email and password.';
+      return Promise.resolve('error');
+    }
+    if (!pk || !pk.v || Date.now() - (pk.at || 0) > 10 * 60 * 1000) {
+      global.SCG_AUTH_NOTICE = name + ' sign-in took too long or was started in another tab. Please press "Continue with Google" again.';
+      return Promise.resolve('error');
+    }
+    return authFetch('/token?grant_type=pkce', { auth_code: code, code_verifier: pk.v }).then(function (s) {
+      if (!s || !s.access_token) throw err(0, 'no_session', '');
+      save('customer', s); return 'oauth';
+    }, function () {
+      global.SCG_AUTH_NOTICE = name + ' sign-in did not finish. Please try again.';
+      return 'error';
+    });
+  }
+
   function takeAuthRedirect() {
+    var oauth = takeOAuthReturn();
+    if (oauth) return oauth;
     var h = location.hash;
     // a link that has expired or was already used comes back with an error instead of a session: say so on the account page
     if (/(^#|&)error(_code|_description)?=/.test(h) && !/access_token=/.test(h)) {
@@ -329,5 +380,5 @@
     return type || 'signin';
   }
 
-  global.SCGSupabase = { avatarUrl: avatarUrl, call: call, rpc: rpc, edge: edge, mfa: mfa, signOut: signOut, token: token, url: URL_, takeAuthRedirect: takeAuthRedirect };
+  global.SCGSupabase = { avatarUrl: avatarUrl, call: call, rpc: rpc, edge: edge, mfa: mfa, signOut: signOut, token: token, url: URL_, takeAuthRedirect: takeAuthRedirect, providers: providers, oauthStart: oauthStart };
 })(window);

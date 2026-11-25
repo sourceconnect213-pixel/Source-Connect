@@ -686,6 +686,43 @@ check('Remove: one confirm, the co-admin and their sign-in are gone', sql(`SELEC
 const loginGone = await (await fetch(`${SB}/auth/v1/token?grant_type=password`, { method: 'POST', headers: { apikey: ANON, 'content-type': 'application/json' }, body: JSON.stringify({ email: 'storehelper@staff.invalid', password: 'Helper-Own-Pass-9' }) })).json();
 check('the removed co-admin can no longer sign in', !loginGone.access_token);
 
+// 10i. "Continue with Google": hidden while Google is off; when on, the real code swap (PKCE) signs the person in.
+// Google itself is played by the test: the /authorize hop is answered here the way Supabase would after Google says yes.
+{
+  const gC = await ctx(); const gp = await page(gC, 'google');
+  await gp.goto(withSb('#account')); await gp.waitForSelector('#loginF', { timeout: 20000 }); await gp.waitForTimeout(800);
+  check('Google button stays hidden while Google sign-in is off', (await gp.$$eval('.g-slot', l => l.length)) === 2 && !(await gp.isVisible('.g-slot [data-google]')));
+  await gp.route('**/auth/v1/settings', async r => { const res = await r.fetch(); const j = await res.json(); j.external = { ...j.external, google: true }; r.fulfill({ response: res, json: j }); });
+  const gEmail = `google-e2e-${Date.now()}@example.com`, gId = crypto.randomUUID(), gCode = crypto.randomUUID();
+  let challenge = null, redirectTo = null;
+  await gp.route('**/auth/v1/authorize**', r => {
+    const u = new URL(r.request().url()); challenge = u.searchParams.get('code_challenge'); redirectTo = u.searchParams.get('redirect_to');
+    sql(`INSERT INTO auth.users (id, instance_id, aud, role, email, email_confirmed_at, confirmation_token, recovery_token, email_change_token_new, email_change, email_change_token_current, phone_change, phone_change_token, reauthentication_token, raw_app_meta_data, raw_user_meta_data, created_at, updated_at) VALUES ('${gId}', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', '${gEmail}', now(), '', '', '', '', '', '', '', '', '{"provider":"google","providers":["google"]}', '{"name":"Gayani Google","email":"${gEmail}"}', now(), now())`);
+    sql(`INSERT INTO auth.identities (provider_id, user_id, identity_data, provider, created_at, updated_at) VALUES ('g-${gId}', '${gId}', '{"sub":"g-${gId}","email":"${gEmail}"}', 'google', now(), now())`);
+    sql(`INSERT INTO auth.flow_state (id, user_id, auth_code, code_challenge_method, code_challenge, provider_type, provider_access_token, provider_refresh_token, authentication_method, auth_code_issued_at, created_at, updated_at) VALUES (gen_random_uuid(), '${gId}', '${gCode}', 's256', '${challenge}', 'google', '', '', 'oauth', now(), now(), now())`);
+    r.fulfill({ status: 302, headers: { location: `${redirectTo}?code=${gCode}` } });
+  });
+  await gp.reload(); await gp.waitForSelector('#loginF', { timeout: 20000 });   // the provider list is read once per page load
+  await gp.waitForSelector('#loginF .g-slot:not([hidden]) [data-google]', { timeout: 15000 });
+  check('Google button shows on Sign in and Create account once Google is on', (await gp.$$eval('.g-slot:not([hidden])', l => l.length)) === 2);
+  await gp.screenshot({ path: OUT + '/sb-google-button.jpg', type: 'jpeg', quality: 70 });
+  await gp.click('#loginF [data-google]');
+  await gp.waitForSelector('#signOut', { timeout: 20000 });
+  check('PKCE: a real S256 challenge was sent and the return address is the shop page', /^[A-Za-z0-9_-]{43}$/.test(challenge || '') && redirectTo === SITE + '/');
+  check('back from Google: signed in, the code is gone from the address, name from Google', !/code=/.test(gp.url()) && /#account$/.test(gp.url()) && /Hello, Gayani/.test(await gp.textContent('#app')));
+  check('the one-time code cannot be used again', sql(`SELECT count(*) FROM auth.flow_state WHERE auth_code = '${gCode}'`) === '0');
+  // replay: the same code sent again (e.g. from browser history) is refused and explained
+  await gp.evaluate(() => { localStorage.removeItem('scg_sb_customer_v1'); });
+  await gp.goto(`${SITE}/?code=${gCode}#account`); await gp.waitForSelector('#loginF', { timeout: 20000 });
+  check('an old or stolen code is refused with a plain message', /Google sign-in (took too long|did not finish)/.test(await gp.textContent('#loginMsg')) && !(await gp.isVisible('#signOut')));
+  // Google says no (or the email already has a password account): plain message, nobody signed in
+  await gp.evaluate(() => sessionStorage.setItem('scg_sb_pkce_v1', JSON.stringify({ v: 'x'.repeat(64), p: 'google', at: Date.now() })));
+  await gp.goto(`${SITE}/?error=server_error&error_description=Database+error+saving+new+user#account`); await gp.waitForSelector('#loginF', { timeout: 20000 });
+  check('a refused Google sign-in says to use email and password', /sign in with your email and password/.test(await gp.textContent('#loginMsg')) && !/error=/.test(gp.url()));
+  await gC.close();
+  sql(`DELETE FROM auth.users WHERE id = '${gId}'`);
+}
+
 // 11. usage page (main admin)
 await ap.evaluate(() => { location.hash = 'usage'; }); await ap.waitForSelector('.use-row', { timeout: 15000 });
 const use = await ap.$$eval('.use-row .use-head', l => l.map(x => x.textContent.replace(/\s+/g, ' ').trim()));

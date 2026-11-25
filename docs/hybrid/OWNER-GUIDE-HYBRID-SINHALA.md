@@ -172,3 +172,21 @@
      - Ita passe **witharak**: Supabase → Authentication → Attack Protection → Enable CAPTCHA → Turnstile → **Secret key** eka ehe danna.
      - Secret key eka chat ekata danna epa. Ordera wenas kaloth login wenna bæri wenawa.
   4. Oyage **Supabase, Cloudflare, GitHub accounts** wala two-step login on karanna.
+
+## Google sign-in ("Continue with Google")
+
+- My account page eke Sign in saha Create account dekema **Continue with Google** button eka thiyenawa. Supabase eke Google on karana kal eka penne nê.
+- On karanna (oya witharak, oyage Google account eken):
+  1. console.cloud.google.com → aluth project ekak (nama: Source Connect).
+  2. Google Auth Platform → Branding / Audience: **External**, app name, support email, authorized domain `supabase.co` → **Publish app**.
+  3. Clients → Create client → **Web application**:
+     - Authorized JavaScript origins: `https://source-connect-915.pages.dev`
+     - Authorized redirect URIs: `https://nuqmaiybqmuvtfnjdzvn.supabase.co/auth/v1/callback`
+  4. Supabase → Authentication → Sign In / Providers → **Google** → Enable → Client ID saha Client Secret paste karala Save.
+     Client Secret eka Supabase ekata witharai. Chat ekata, email ekata danna epa.
+- Arakshawa:
+  - Google login eka PKCE widiyata wada karanawa: aapahu ena code eka eka parai, minithu 5i, eka tab ekai.
+  - Email + password account ekak dæn thiyena email ekakata Google eken enna bæ. Eyata "sign in with your email and password" kiyala penawanawa. Hethuwa: account hadaddi email eka verify karanne nê nisa, wena kenek oyage email eken kalin account ekak hadala thibbot, Google eken eddi eyage account ekata yana eka mehema nawaththanawa.
+  - Staff (admin) accounts walata Google login nê.
+- Google eken aawa customerta phone number saha address nê. Eka checkout eke illanawa; My account → My details walin dannath puluwan.
+- Aluth domain ekak gaththama: Google client eke JavaScript origin ekata saha Supabase URL Configuration ekata eka add karanna.
