@@ -72,7 +72,7 @@ jobs:
           node-version: 22
       - name: Website files only (no server code, database files or docs)
         run: |
-          mkdir dist && cp -r index.html admin assets css js dist/ && cp deploy/_headers dist/_headers
+          mkdir dist && cp -r index.html privacy.html admin assets css js dist/ && cp deploy/_headers dist/_headers
           ! grep -rqE 'sb_secret_|"role":"service_role"' dist
       - name: Check the Cloudflare token (prints only whether it is valid and what it can reach, never the token)
         if: env.CLOUDFLARE_API_TOKEN != ''
