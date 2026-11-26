@@ -1,4 +1,9 @@
 /* Runs in <head>, before the page paints (kept out of the HTML so the Content-Security-Policy can forbid inline scripts). */
+/* One address for the shop: www.sourceconnectglobal.com goes to sourceconnectglobal.com (sign-ins, carts and Google
+   sign-in all belong to one address). */
+(function () {
+  if (location.hostname === 'www.sourceconnectglobal.com') location.replace('https://sourceconnectglobal.com' + location.pathname + location.search + location.hash);
+})();
 /* Decide before the page paints whether the welcome intro plays (see js/intro.js). */
 (function () {
   try {
