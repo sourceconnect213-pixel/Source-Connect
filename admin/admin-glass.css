@@ -225,3 +225,54 @@ input, select, textarea { border-radius: 12px; }
 .side-brand > div { min-width: 0; }
 .side-brand small { display: block; letter-spacing: .14em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #ff8a8d; }
 @media (pointer: coarse) { .checklist .ck a:not(.btn) { display: inline-flex; align-items: center; min-height: 44px; } }
+
+/* =========================================================
+   Deep glass: fields, buttons, chips, tags, switches, table head, pop-ups — the small parts too.
+   (UI UX Pro Max "glassmorphism": translucent white, 1 px light edge, top reflection, depth; contrast 4.5:1.)
+   ========================================================= */
+:root {
+  --g-fill: linear-gradient(180deg, rgba(255, 255, 255, .7), rgba(255, 255, 255, .52));
+  --g-edge: rgba(255, 255, 255, .95);
+  --g-lift: inset 0 1px 0 rgba(255, 255, 255, .95), inset 0 -1px 0 rgba(110, 86, 52, .06), 0 10px 22px -18px rgba(74, 52, 20, .5);
+  --g-well: inset 0 1px 2px rgba(74, 52, 20, .10), 0 1px 0 rgba(255, 255, 255, .9);
+}
+.content input:not([type=checkbox]):not([type=radio]):not([type=color]):not([type=range]):not([type=file]), .content select, .content textarea,
+.modal input:not([type=checkbox]):not([type=radio]):not([type=color]):not([type=range]):not([type=file]), .modal select, .modal textarea,
+.login-card input {
+  background: var(--g-fill); border: 1px solid var(--line); box-shadow: var(--g-well);
+  transition: border-color .18s, box-shadow .2s, background-color .18s;
+}
+.content input:focus, .content select:focus, .content textarea:focus, .modal input:focus, .modal select:focus, .modal textarea:focus, .login-card input:focus {
+  background: rgba(255, 255, 255, .95); border-color: var(--navy); box-shadow: var(--g-well), 0 0 0 3px rgba(11, 42, 111, .16);
+}
+::placeholder { color: #6b7385; opacity: 1; }
+
+/* buttons: glossy glass */
+.btn:not(.primary):not(.dark):not(.danger):not(.ghost):not(.link) { background: var(--g-fill); border-color: rgba(11, 42, 111, .18); box-shadow: var(--g-lift); }
+.btn:not(.primary):not(.dark):not(.danger):not(.ghost):not(.link):hover { background: rgba(255, 255, 255, .95); border-color: var(--navy); }
+.btn.primary { background: linear-gradient(180deg, #ef3a40, #c8111a); border-color: rgba(160, 10, 16, .6); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .34), inset 0 -1px 0 rgba(0, 0, 0, .12), 0 10px 22px -14px rgba(215, 20, 26, .85); }
+.btn.primary:hover { background: linear-gradient(180deg, #ff474d, #d7141a); }
+.btn.dark { background: linear-gradient(180deg, #1b2a52, #070f28); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), 0 10px 22px -14px rgba(7, 15, 40, .9); }
+.btn.danger { background: rgba(255, 255, 255, .6); box-shadow: var(--g-lift); }
+.btn.danger:hover { background: linear-gradient(180deg, #ef3a40, #c8111a); }
+.icon-btn:hover { background: rgba(255, 255, 255, .7); box-shadow: var(--g-lift); }
+
+/* chips, tags, switches */
+.filters .chip { background-color: rgba(255, 255, 255, .6); background-image: linear-gradient(180deg, rgba(255, 255, 255, .5), rgba(255, 255, 255, 0)); border-color: var(--g-edge); box-shadow: var(--g-lift); }
+.filters .chip.on { background-color: #070f28; background-image: linear-gradient(180deg, #1b2a52, #070f28); color: #fff; border-color: #070f28; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22); }
+.tag { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .8), 0 0 0 1px rgba(11, 42, 111, .06); }
+.switch i { background: rgba(160, 168, 188, .55); box-shadow: inset 0 1px 3px rgba(5, 11, 28, .25), 0 1px 0 rgba(255, 255, 255, .9); }
+.switch i::after { box-shadow: 0 2px 6px rgba(5, 11, 28, .3), inset 0 -1px 0 rgba(0, 0, 0, .06); }
+.switch input:checked + i { background: linear-gradient(180deg, #ef3a40, #c8111a); }
+
+/* tables, small boxes, pop-ups */
+th { background: linear-gradient(180deg, rgba(255, 255, 255, .85), rgba(240, 236, 228, .85)); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.ship-box { background: var(--g-fill); border-color: var(--g-edge); box-shadow: var(--g-lift); border-radius: 16px; }
+.modal-box { background: linear-gradient(180deg, rgba(255, 255, 255, .92), rgba(252, 249, 243, .88)); -webkit-backdrop-filter: blur(24px) saturate(150%); backdrop-filter: blur(24px) saturate(150%); border: 1px solid var(--g-edge); }
+.modal-head { background: rgba(255, 255, 255, .7); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+.side-search kbd { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25); }
+
+@media (prefers-reduced-transparency: reduce) {
+  th, .modal-box, .modal-head { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .modal-box { background: #fff; }
+}
