@@ -1,5 +1,5 @@
 /* =========================================================
-   Seller Center — "harbour at night" glass theme
+   Seller Center — "cream harbour glass" theme (the same family as the shop's site-glass.css)
    Loaded after admin.css. It changes only the look (colour, depth, shape); every size rule, grid and behaviour
    stays in admin.css, so removing this file brings back the earlier look exactly.
    Ideas taken from the reference videos: a floating frosted sidebar with a white "tab" for the open page,
@@ -7,7 +7,9 @@
    all in the shop's own navy and red.
    ========================================================= */
 :root {
-  --night: #061233;          /* the backdrop: deep harbour navy */
+  --night: #061233;          /* deep harbour navy: the sidebar */
+  --cream: #f3ebdd;          /* the logo's cream: the backdrop */
+  --sand: #e7d9c1;
   --glass: rgba(248, 250, 255, .86);
   --glass-line: rgba(255, 255, 255, .55);
   --glass-edge: rgba(11, 42, 111, .10);
@@ -15,13 +17,13 @@
   --radius: 16px;
 }
 
-/* the backdrop: night navy with the warm glow of a port light (red) and a cool one (blue) */
+/* the backdrop: the logo's cream, lit by a soft red and a soft navy glow */
 body {
-  background-color: var(--night);
+  background-color: var(--cream);
   background-image:
-    radial-gradient(60vw 50vh at 88% 4%, rgba(215, 20, 26, .30), transparent 60%),
-    radial-gradient(55vw 60vh at 6% 96%, rgba(38, 99, 235, .30), transparent 60%),
-    linear-gradient(160deg, #0b2a6f 0%, #061233 55%, #040b22 100%);
+    radial-gradient(60vw 55vh at 92% 0%, rgba(215, 20, 26, .14), transparent 60%),
+    radial-gradient(60vw 65vh at 0% 100%, rgba(11, 42, 111, .18), transparent 62%),
+    linear-gradient(170deg, #f7f1e6 0%, var(--cream) 45%, var(--sand) 100%);
   background-attachment: fixed;
 }
 
@@ -30,7 +32,7 @@ body {
   .side { margin: 12px 0 12px 12px; top: 12px; height: calc(100vh - 24px); border-radius: 26px; }
 }
 .side {
-  background: linear-gradient(180deg, rgba(31, 72, 160, .55), rgba(9, 26, 72, .72));
+  background: linear-gradient(180deg, rgba(24, 64, 152, .94), rgba(8, 24, 68, .96));   /* deep navy glass: on cream it must stay dark enough to read */
   -webkit-backdrop-filter: blur(22px) saturate(140%); backdrop-filter: blur(22px) saturate(140%);
   border: 1px solid rgba(255, 255, 255, .14);
   box-shadow: 0 1px 0 rgba(255, 255, 255, .18) inset, 0 30px 60px -30px rgba(0, 0, 0, .7);
@@ -61,12 +63,14 @@ body {
 /* ---------- the work area: one large light glass canvas ---------- */
 .main {
   margin: 12px; min-height: calc(100vh - 24px); border-radius: 28px; overflow: clip;
-  background: linear-gradient(180deg, rgba(246, 248, 253, .97), rgba(236, 241, 250, .95));
-  box-shadow: 0 1px 0 rgba(255, 255, 255, .9) inset, 0 40px 80px -40px rgba(0, 0, 0, .6);
+  background: linear-gradient(180deg, rgba(255, 255, 255, .80), rgba(252, 249, 243, .74));
+  -webkit-backdrop-filter: blur(24px) saturate(140%); backdrop-filter: blur(24px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, .85);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .95) inset, 0 40px 80px -44px rgba(74, 52, 20, .55);
 }
 @media (max-width: 900px) { .main { margin: 8px; min-height: calc(100vh - 16px); border-radius: 22px; } }
 .top {
-  background: rgba(246, 248, 253, .78);
+  background: rgba(255, 252, 246, .74);
   -webkit-backdrop-filter: blur(16px) saturate(150%); backdrop-filter: blur(16px) saturate(150%);
   border-bottom: 1px solid var(--glass-edge);
 }
@@ -111,7 +115,10 @@ input, select, textarea { border-radius: 12px; }
 /* ---------- live preview pane sits on the same night backdrop ---------- */
 .pv { background: rgba(223, 228, 238, .92); }
 
-/* ---------- sign-in: the card becomes frosted glass over the night backdrop ---------- */
+/* ---------- sign-in: cream backdrop with the two glows; the card is frosted glass ---------- */
+.login { background: linear-gradient(170deg, #f7f1e6, var(--cream) 50%, var(--sand)); }
+.login-bg { background: radial-gradient(circle at 28% 30%, rgba(11, 42, 111, .32), transparent 46%), radial-gradient(circle at 72% 70%, rgba(215, 20, 26, .22), transparent 42%); }
+.login-powered { color: var(--muted); }
 .login-card {
   background: rgba(255, 255, 255, .9);
   -webkit-backdrop-filter: blur(20px) saturate(140%); backdrop-filter: blur(20px) saturate(140%);
@@ -120,7 +127,8 @@ input, select, textarea { border-radius: 12px; }
 
 /* no glass blur where the device asks for less transparency or motion */
 @media (prefers-reduced-transparency: reduce) {
-  .side, .top, .toast, .login-card, .modal .scrim { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .side, .top, .toast, .login-card, .modal .scrim, .main { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .main { background: #fbf8f2; }
   .side { background: #0b2a6f; }
 }
 @media (prefers-reduced-motion: reduce) {

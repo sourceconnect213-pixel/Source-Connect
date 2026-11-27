@@ -1,0 +1,120 @@
+/* =========================================================
+   Source Connect Global — "cream harbour glass"
+   Loaded after style.css. It changes only the look: colour, depth and shape. Layout, sizes and behaviour stay in
+   style.css, so taking this file away gives back the earlier look exactly.
+   - The page sits on the cream of the logo, lit by a soft navy and a soft red glow.
+   - The header floats as a navy glass bar (from the "glassy navbar" reference); the category row is a frosted pill
+     and the categories menu a frosted panel.
+   - Cards and panels are frosted white on cream. Blur is used only on the few layers that float over moving content
+     (header, menus, drawer, phone bar), so long product grids stay fast on phones.
+   ========================================================= */
+:root {
+  --cream: #f3ebdd;           /* the logo's cream */
+  --sand: #e7d9c1;
+  --bg: var(--cream);
+  --card: rgba(255, 255, 255, .78);
+  --line: rgba(110, 86, 52, .16);
+  --glass-edge: rgba(255, 255, 255, .85);
+  --warm-shadow: 0 1px 0 rgba(255, 255, 255, .95) inset, 0 16px 34px -24px rgba(74, 52, 20, .45);
+  --radius: 16px;
+}
+
+body {
+  background-color: var(--cream);
+  background-image:
+    radial-gradient(70vw 60vh at 100% 0%, rgba(215, 20, 26, .10), transparent 60%),
+    radial-gradient(70vw 70vh at 0% 30%, rgba(11, 42, 111, .12), transparent 62%),
+    linear-gradient(180deg, #f6efe3 0%, var(--cream) 40%, var(--sand) 100%);
+  background-attachment: fixed;
+}
+
+/* ---------- header: a floating navy glass bar ---------- */
+.header {
+  top: 8px; margin: 8px 12px 0; border-radius: 22px;
+  background: linear-gradient(90deg, rgba(11, 42, 111, .88), rgba(18, 58, 145, .84) 60%, rgba(27, 47, 134, .86));
+  -webkit-backdrop-filter: blur(18px) saturate(150%); backdrop-filter: blur(18px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, .16);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .18) inset, 0 22px 44px -26px rgba(11, 26, 70, .75);
+}
+.logo img { box-shadow: 0 0 0 3px rgba(243, 235, 221, .55); }
+.search { border-radius: 999px; overflow: visible; box-shadow: 0 0 0 4px rgba(255, 255, 255, .10); }
+.search select { border-radius: 999px 0 0 999px; background: #f6efe3; padding-left: 14px; }
+.search > button { border-radius: 0 999px 999px 0; }
+.suggest { border-radius: 18px; background: rgba(255, 255, 255, .92); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); border: 1px solid var(--glass-edge); }
+.hbtn { border-radius: 14px; }
+.hbtn:hover { background: rgba(255, 255, 255, .14); }
+
+/* ---------- the category row (inside the header): a cream pill ---------- */
+.navbar { background: transparent; border-bottom: 0; }
+.navbar-inner {
+  margin-top: 8px; border-radius: 999px; padding-left: 10px; padding-right: 10px; height: 48px;
+  background: rgba(255, 251, 244, .94);       /* a cream-white pill inside the navy bar */
+  border: 1px solid rgba(255, 255, 255, .9); box-shadow: 0 10px 24px -16px rgba(5, 11, 28, .7);
+  width: calc(100% - 32px); max-width: 1208px; margin-bottom: 10px;
+}
+.navbar a { height: 36px; border-bottom: 0; border-radius: 999px; padding: 0 14px; }
+.navbar a:hover { background: rgba(11, 42, 111, .07); color: var(--navy); }
+.navbar a.on { background: var(--navy); color: #fff; }
+.navbar a.hot:hover { background: rgba(215, 20, 26, .08); color: var(--red); }
+.cats-btn { padding-left: 4px; }
+/* the categories menu: a frosted panel */
+.cats-menu {
+  border-radius: 20px; padding: 8px;
+  background: rgba(255, 255, 255, .86);
+  -webkit-backdrop-filter: blur(20px) saturate(150%); backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid var(--glass-edge);
+  box-shadow: 0 30px 60px -24px rgba(40, 28, 10, .45);
+}
+.cats-menu a { border-radius: 12px; }
+
+/* ---------- surfaces ---------- */
+.panel { background: var(--card); border: 1px solid var(--glass-edge); box-shadow: var(--warm-shadow); border-radius: 20px; }
+.card { background: rgba(255, 255, 255, .84); border: 1px solid var(--glass-edge); border-radius: 18px; box-shadow: var(--warm-shadow); }
+.card:hover { box-shadow: 0 1px 0 #fff inset, 0 24px 40px -22px rgba(74, 52, 20, .55); }
+.card .media { background: radial-gradient(circle at 50% 40%, #fff 0%, color-mix(in srgb, var(--c, #e7d9c1) 12%, #f7f1e6) 78%); }
+.card .tag-off, .card .tag-new { border-radius: 999px; padding: 2px 8px; }
+
+/* ---------- buttons and fields: rounded, the shop red stays the main action ---------- */
+.btn { border-radius: 999px; }
+.btn.line { background: rgba(255, 255, 255, .8); }
+input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea { border-radius: 12px; }
+.search input, .search select { border-radius: 0; }
+.search select { border-radius: 999px 0 0 999px; }
+
+/* ---------- side drawer (phones): frosted ---------- */
+.drawer { background: rgba(250, 246, 239, .94); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); border-radius: 0 24px 24px 0; }
+.drawer-head { border-radius: 0 24px 0 0; }
+
+/* ---------- messages ---------- */
+.toast { border-radius: 999px; background: rgba(10, 20, 48, .92); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+
+/* ---------- footer: the ink band, with rounded top corners ---------- */
+.footer { border-radius: 28px 28px 0 0; margin-left: 12px; margin-right: 12px; }
+
+/* ---------- phones ---------- */
+@media (max-width: 680px) {
+  .header { margin: 6px 8px 0; top: 6px; border-radius: 20px; }
+  .navbar-inner { width: calc(100% - 16px); }
+  .footer { margin-left: 0; margin-right: 0; border-radius: 24px 24px 0 0; }
+  /* the quick bar floats as a frosted pill */
+  body { padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
+  .bottom-nav {
+    left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-bottom: 0;
+    border-radius: 22px; border: 1px solid var(--glass-edge);
+    background: rgba(255, 255, 255, .86);
+    -webkit-backdrop-filter: blur(18px) saturate(160%); backdrop-filter: blur(18px) saturate(160%);
+    box-shadow: 0 18px 40px -18px rgba(40, 28, 10, .5);
+  }
+  .bottom-nav a { color: #3e4659; }   /* dark enough to read on frosted glass over any page colour (AA) */
+  .bottom-nav a.on { color: #c01116; }
+  .to-top { bottom: calc(92px + env(safe-area-inset-bottom, 0px)); }
+  .toast { bottom: calc(94px + env(safe-area-inset-bottom, 0px)); }
+  html { scroll-padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px)); }
+}
+
+/* less transparency where the device asks for it */
+@media (prefers-reduced-transparency: reduce) {
+  .header, .navbar-inner, .cats-menu, .drawer, .bottom-nav, .suggest, .toast { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .header { background: var(--navy); }
+  .navbar-inner, .cats-menu, .bottom-nav, .suggest { background: #fff; }
+}
