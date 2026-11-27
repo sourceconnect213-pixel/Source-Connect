@@ -31,10 +31,17 @@ body {
 /* ---------- header: a floating navy glass bar ---------- */
 .header {
   top: 8px; margin: 8px 12px 0; border-radius: 22px;
-  background: linear-gradient(90deg, rgba(11, 42, 111, .88), rgba(18, 58, 145, .84) 60%, rgba(27, 47, 134, .86));
-  -webkit-backdrop-filter: blur(18px) saturate(150%); backdrop-filter: blur(18px) saturate(150%);
+  background: transparent;
   border: 1px solid rgba(255, 255, 255, .16);
   box-shadow: 0 1px 0 rgba(255, 255, 255, .18) inset, 0 22px 44px -26px rgba(11, 26, 70, .75);
+}
+/* The glass (colour + blur) sits on a layer behind the header's content, not on the header itself. A blur on the
+   header would make it the "backdrop root" and the containing block of the menus inside it: the categories menu and
+   the search suggestions could then no longer blur the page behind them, and their fixed position would be shifted. */
+.header::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(90deg, rgba(11, 42, 111, .88), rgba(18, 58, 145, .84) 60%, rgba(27, 47, 134, .86));
+  -webkit-backdrop-filter: blur(18px) saturate(150%); backdrop-filter: blur(18px) saturate(150%);
 }
 .logo img { box-shadow: 0 0 0 3px rgba(243, 235, 221, .55); }
 .search { border-radius: 999px; overflow: visible; box-shadow: 0 0 0 4px rgba(255, 255, 255, .10); }
@@ -66,6 +73,20 @@ body {
   box-shadow: 0 30px 60px -24px rgba(40, 28, 10, .45);
 }
 .cats-menu a { border-radius: 12px; }
+/* the categories menu is a wide glass panel ("glassy navbar" mega menu): tiles with the category picture */
+.cats-menu { width: min(760px, calc(100vw - 32px)); padding: 14px; }
+.cats-menu .catlist { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.cats-menu .catlist a { padding: 10px 12px; font-weight: 500; border-radius: 14px; }
+.cats-menu .catlist a::after { content: none; }
+.cats-menu .catlist a:hover, .cats-menu .catlist a:focus-visible { background: rgba(11, 42, 111, .06); color: var(--navy); padding-left: 12px; }
+.cats-menu .catlist .ci { width: 38px; height: 38px; border-radius: 12px; box-shadow: 0 1px 0 rgba(255, 255, 255, .9) inset; }
+.cats-menu .catlist .ci .pic { width: 28px; height: 28px; }
+.mega-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+.mega-foot a { padding: 8px 14px; border-radius: 999px; font-size: 13px; font-weight: 500; color: var(--navy); }
+.mega-foot a:hover { background: rgba(11, 42, 111, .06); }
+.mega-foot .mega-cta { margin-left: auto; background: var(--ink); color: #fff; font-weight: 700; }
+.mega-foot .mega-cta:hover { background: var(--navy); }
+@media (max-width: 960px) { .cats-menu .catlist { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
 /* ---------- surfaces ---------- */
 .panel { background: var(--card); border: 1px solid var(--glass-edge); box-shadow: var(--warm-shadow); border-radius: 20px; }
@@ -114,7 +135,7 @@ input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea
 
 /* less transparency where the device asks for it */
 @media (prefers-reduced-transparency: reduce) {
-  .header, .navbar-inner, .cats-menu, .drawer, .bottom-nav, .suggest, .toast { -webkit-backdrop-filter: none; backdrop-filter: none; }
-  .header { background: var(--navy); }
+  .header::before, .navbar-inner, .cats-menu, .drawer, .bottom-nav, .suggest, .toast { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .header::before { background: var(--navy); }
   .navbar-inner, .cats-menu, .bottom-nav, .suggest { background: #fff; }
 }

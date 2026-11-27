@@ -1461,6 +1461,9 @@
       }
       $$('#sideNav a[data-v]').forEach(function (a) { var p = NEED[a.dataset.v]; a.hidden = !!(p && !can(p)); });
       if (me) staffFirst = String(me.displayName || me.username || '').trim().split(/\s+/)[0] || '';
+      // the person at the foot of the menu: initials, name and role
+      if (me) { var nm = String(me.displayName || me.username || ''), ini = nm.trim().split(/\s+/).slice(0, 2).map(function (w) { return w.charAt(0); }).join('').toUpperCase();
+        $('#sideAv').textContent = ini || '?'; $('#sideName').textContent = nm; $('#sideRole').textContent = me.mainAdmin ? 'Main admin' : 'Co-admin'; $('#sideMe').hidden = false; }
       var who = $('.side-brand small'); if (who && me) who.textContent = (me.displayName || me.username).toUpperCase() + ' · ' + (me.mainAdmin ? 'MAIN ADMIN' : 'CO-ADMIN');
       checkRenewals(); checkAccessRequests(); checkReturns();
     }

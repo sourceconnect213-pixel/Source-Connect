@@ -134,3 +134,56 @@ input, select, textarea { border-radius: 12px; }
 @media (prefers-reduced-motion: reduce) {
   .side { transition: none; }
 }
+
+/* ---------- menu: find a page, narrow mode, the signed-in person (from the "glassy sidebar" reference) ---------- */
+.side-mini-btn { margin-left: auto; width: 30px; height: 30px; flex: none; border-radius: 10px; display: grid; place-items: center; color: #dfe7fa; background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .12); }
+.side-mini-btn:hover { background: rgba(255, 255, 255, .16); }
+.side-mini-btn svg { width: 16px; height: 16px; transition: transform .3s var(--ease); }
+.side-mini-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+@media (max-width: 900px) { .side-mini-btn { display: none; } }
+/* the menu column scrolls: its parts keep their size instead of being squeezed */
+.side > * { flex-shrink: 0; }
+.side-search { display: flex; align-items: center; gap: 8px; padding: 0 10px; height: 42px; border-radius: 14px; background: rgba(255, 255, 255, .10); border: 1px solid rgba(255, 255, 255, .14); color: #dfe7fa; font-weight: 400; }
+.side-search:focus-within { background: rgba(255, 255, 255, .16); border-color: rgba(255, 255, 255, .45); }
+.side-search svg { width: 17px; height: 17px; flex: none; opacity: .85; }
+.side-search input { flex: 1; min-width: 0; padding: 0; border: 0; background: transparent; color: #fff; font-size: 13.5px; box-shadow: none !important; }
+.side-search input::placeholder { color: rgba(223, 231, 250, .72); }
+.side-search input::-webkit-search-cancel-button { filter: invert(1); }
+.side-search kbd { font: 600 10.5px/1 'Roboto', sans-serif; padding: 4px 6px; border-radius: 6px; background: rgba(255, 255, 255, .14); color: #dfe7fa; white-space: nowrap; }
+@media (pointer: coarse) { .side-search kbd { display: none; } }
+.side-none { margin: -8px 12px 0; color: #dfe7fa; font-size: 12.5px; }
+#sideNav a.nf, #sideNav .side-label.nf { display: none; }
+.side-me { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 16px; background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .12); color: #fff; min-width: 0; }
+.side-av { width: 38px; height: 38px; flex: none; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 14px; color: #fff; background: linear-gradient(135deg, var(--red), #8f0c10); box-shadow: 0 0 0 2px rgba(255, 255, 255, .7); }
+.side-me div { min-width: 0; }
+.side-me b { display: block; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-me small { color: rgba(223, 231, 250, .78); font-size: 11.5px; }
+
+/* narrow menu: icons only (computers) */
+@media (min-width: 901px) {
+  .shell.side-mini { grid-template-columns: 92px minmax(0, 1fr); }
+  .shell.side-mini.has-pv { grid-template-columns: 92px minmax(0, 1fr) var(--pvw, 50%); }
+  .shell.side-mini.has-pv.pv-full { grid-template-columns: 92px minmax(0, 1fr) var(--pvw, 70%); }
+  .side-mini .side { padding: 18px 10px; align-items: center; }
+  .side-mini .side-brand { flex-direction: column; padding: 0; gap: 10px; }
+  .side-mini .side-brand > div, .side-mini .side-search, .side-mini .side-none, .side-mini .side-label,
+  .side-mini .side-foot .btn, .side-mini .side-powered, .side-mini .side-me div { display: none; }
+  .side-mini .side-mini-btn { margin: 0; }
+  .side-mini .side-mini-btn svg { transform: rotate(180deg); }
+  .side-mini .side nav { width: 100%; }
+  .side-mini .side nav a { position: relative; justify-content: center; font-size: 0; gap: 0; padding: 12px 0; }
+  .side-mini .side nav a svg { width: 21px; height: 21px; }
+  .side-mini .side nav a .pill { position: absolute; top: 3px; right: 6px; font-size: 9.5px; padding: 0 5px; margin: 0; }
+  .side-mini .side nav a .pill.easy { display: none; }
+  .side-mini .side-foot { width: 100%; justify-items: center; }
+  .side-mini .side-me { padding: 6px; justify-content: center; }
+}
+@media (min-width: 901px) and (max-width: 1100px) {
+  .shell.side-mini.has-pv, .shell.side-mini.has-pv.pv-full { grid-template-columns: 92px minmax(0, 1fr); }
+}
+
+/* ---------- dashboard: the first number is the highlight card (from the "glassy dashboard" reference) ---------- */
+.stats > .stat:first-child { background: linear-gradient(150deg, #123a91, var(--navy) 55%, #081c4d); border-color: rgba(255, 255, 255, .2); color: #fff; box-shadow: 0 20px 36px -22px rgba(11, 42, 111, .9); }
+.stats > .stat:first-child small { color: rgba(255, 255, 255, .78); }
+.stats > .stat:first-child b { color: #fff; }
+.stats > .stat:first-child::after { background: var(--red); opacity: .35; }

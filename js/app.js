@@ -100,7 +100,8 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
     var ann = (s.announcement || '').split('✦').map(function (x) { return '<span>✦ ' + esc(x.trim()) + '</span>'; }).join('');
     $('#announce').innerHTML = ann + ann;
     $('#searchCat').innerHTML = '<option value="">All categories</option>' + db.categories.map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join('');
-    $('#catsMenu').innerHTML = catListHTML();
+    // the categories menu opens as a wide glass panel: every category as a tile, then quick links and one main action
+    $('#catsMenu').innerHTML = catListHTML() + '<div class="mega-foot"><a href="#flash">⚡ Flash Sale</a><a href="#china-direct">How importing works</a><a href="#track">Track my order</a><a class="mega-cta" href="#shop">Shop all products</a></div>';
     $('#drawerLinks').innerHTML = catListHTML() + '<div class="catlist" style="border-top:1px solid var(--line);margin-top:6px;padding-top:6px">' +
       '<a href="#flash">⚡ Flash Sale</a>' + db.collections.map(function (c) { return '<a href="#col/' + c.id + '">' + esc(c.name) + '</a>'; }).join('') +
       '<a href="#track">Track My Order</a><a href="#china-direct">How Importing Works</a></div>';
@@ -112,8 +113,10 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
     $('#payList').innerHTML = (s.paymentMethods || []).filter(function (m) { return m !== 'Bank Transfer' || bankReady(); }).map(function (m) { return '<span>' + esc(m) + '</span>'; }).join('');
     // position the fixed dropdown under its button
     var btn = $('#catsBtn'), menu = $('#catsMenu');
-    $('.cats-drop').addEventListener('mouseenter', function () { var b = btn.getBoundingClientRect(); menu.style.left = b.left + 'px'; menu.style.top = b.bottom + 'px'; });
-    btn.addEventListener('focus', function () { var b = btn.getBoundingClientRect(); menu.style.left = b.left + 'px'; menu.style.top = b.bottom + 'px'; });
+    // (kept inside the window: the panel is wide, so on a narrow screen it moves left rather than running off the edge)
+    var placeMenu = function () { var b = btn.getBoundingClientRect(); menu.style.left = Math.max(8, Math.min(b.left, innerWidth - menu.offsetWidth - 16)) + 'px'; menu.style.top = b.bottom + 'px'; };
+    $('.cats-drop').addEventListener('mouseenter', placeMenu);
+    btn.addEventListener('focus', placeMenu);
     updateCounts();
   }
   function updateCounts(bump) {

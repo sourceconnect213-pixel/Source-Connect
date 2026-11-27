@@ -33,7 +33,10 @@
   <!-- App -->
   <div class="shell" id="shell" hidden>
     <aside class="side" id="side">
-      <div class="side-brand"><img src="../assets/logo-sm.jpg?v=1829ee97" alt=""><div><b>SC Global</b><small>SELLER CENTER</small></div></div>
+      <div class="side-brand"><img src="../assets/logo-sm.jpg?v=1829ee97" alt=""><div><b>SC Global</b><small>SELLER CENTER</small></div>
+        <button type="button" class="side-mini-btn" id="sideMini" aria-pressed="false" aria-label="Make the menu narrow" title="Make the menu narrow"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button></div>
+      <label class="side-search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg><input id="sideSearch" type="search" placeholder="Find a page…" aria-label="Find a page in the menu" autocomplete="off" spellcheck="false"><kbd id="sideKey">Ctrl K</kbd></label>
+      <p class="side-none" id="sideNone" hidden>No page with that name.</p>
       <nav id="sideNav">
         <small class="side-label">Overview</small>
         <a href="#editor" data-v="editor" class="nav-hi"><svg viewBox="0 0 24 24"><path d="M3 5h18v12H3zM8 21h8M12 17v4"/><path d="M8 10l2 2 4-4"/></svg>Visual Editor <span class="pill easy">EASY</span></a>
@@ -54,6 +57,7 @@
         <a href="#settings" data-v="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>Store Settings</a>
       </nav>
       <div class="side-foot">
+        <div class="side-me" id="sideMe" hidden><span class="side-av" id="sideAv" aria-hidden="true"></span><div><b id="sideName"></b><small id="sideRole"></small></div></div>
         <a href="../" target="_blank" rel="noopener" class="btn primary full" id="editSite">✎ Edit on Website ↗</a>
         <a href="../" target="_blank" rel="noopener" class="btn ghost full" id="viewSite">View as Customer ↗</a>
         <button class="btn link full" id="logout">Log out</button>
@@ -111,6 +115,7 @@
   <script src="../js/globe-data.js"></script>
   <script src="../js/globe.js"></script>
   <script src="admin.js"></script>
+  <script src="admin-side.js"></script>
   <script src="../js/pw-toggle.js"></script>
 </body>
 </html>
