@@ -1,0 +1,335 @@
+/* =========================================================
+   Source Connect Global — "cream harbour glass"
+   Loaded after style.css. It changes only the look: colour, depth and shape. Layout, sizes and behaviour stay in
+   style.css, so taking this file away gives back the earlier look exactly.
+   - The page sits on the cream of the logo, lit by a soft navy and a soft red glow.
+   - The header floats as a navy glass bar (from the "glassy navbar" reference); the category row is a frosted pill
+     and the categories menu a frosted panel.
+   - Cards and panels are frosted white on cream. Blur is used only on the few layers that float over moving content
+     (header, menus, drawer, phone bar), so long product grids stay fast on phones.
+   ========================================================= */
+:root {
+  --cream: #f3ebdd;           /* the logo's cream */
+  --sand: #e7d9c1;
+  --bg: var(--cream);
+  --card: rgba(255, 255, 255, .78);
+  --line: rgba(110, 86, 52, .16);
+  --glass-edge: rgba(255, 255, 255, .85);
+  --warm-shadow: 0 1px 0 rgba(255, 255, 255, .95) inset, 0 16px 34px -24px rgba(74, 52, 20, .45);
+  --radius: 16px;
+}
+
+body {
+  background-color: var(--cream);
+  background-image:
+    radial-gradient(70vw 60vh at 100% 0%, rgba(215, 20, 26, .10), transparent 60%),
+    radial-gradient(70vw 70vh at 0% 30%, rgba(11, 42, 111, .12), transparent 62%),
+    linear-gradient(180deg, #f6efe3 0%, var(--cream) 40%, var(--sand) 100%);
+  background-attachment: fixed;
+}
+
+/* ---------- header: a floating navy glass bar ---------- */
+.header {
+  top: 8px; margin: 8px 12px 0; border-radius: 22px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, .16);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .18) inset, 0 22px 44px -26px rgba(11, 26, 70, .75);
+}
+/* The glass (colour + blur) sits on a layer behind the header's content, not on the header itself. A blur on the
+   header would make it the "backdrop root" and the containing block of the menus inside it: the categories menu and
+   the search suggestions could then no longer blur the page behind them, and their fixed position would be shifted. */
+.header::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(90deg, rgba(11, 42, 111, .88), rgba(18, 58, 145, .84) 60%, rgba(27, 47, 134, .86));
+  -webkit-backdrop-filter: blur(18px) saturate(150%); backdrop-filter: blur(18px) saturate(150%);
+}
+.logo img { box-shadow: 0 0 0 3px rgba(243, 235, 221, .55); }
+.search { border-radius: 999px; overflow: visible; box-shadow: 0 0 0 4px rgba(255, 255, 255, .10); }
+.search select { border-radius: 999px 0 0 999px; background: #f6efe3; padding-left: 14px; }
+.search > button { border-radius: 0 999px 999px 0; }
+.suggest { border-radius: 18px; background: rgba(255, 255, 255, .92); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); border: 1px solid var(--glass-edge); }
+.hbtn { border-radius: 14px; }
+.hbtn:hover { background: rgba(255, 255, 255, .14); }
+
+/* ---------- the category row (inside the header): a cream pill ---------- */
+.navbar { background: transparent; border-bottom: 0; }
+.navbar-inner {
+  margin-top: 8px; border-radius: 999px; padding-left: 10px; padding-right: 10px; height: 48px;
+  background: rgba(255, 251, 244, .94);       /* a cream-white pill inside the navy bar */
+  border: 1px solid rgba(255, 255, 255, .9); box-shadow: 0 10px 24px -16px rgba(5, 11, 28, .7);
+  width: calc(100% - 32px); max-width: 1208px; margin-bottom: 10px;
+}
+.navbar a { height: 36px; border-bottom: 0; border-radius: 999px; padding: 0 14px; }
+.navbar a:hover { background: rgba(11, 42, 111, .07); color: var(--navy); }
+.navbar a.on { background: var(--navy); color: #fff; }
+.navbar a.hot:hover { background: rgba(215, 20, 26, .08); color: var(--red); }
+.cats-btn { padding-left: 4px; }
+/* the categories menu: a frosted panel */
+.cats-menu {
+  border-radius: 20px; padding: 8px;
+  background: rgba(255, 255, 255, .86);
+  -webkit-backdrop-filter: blur(20px) saturate(150%); backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid var(--glass-edge);
+  box-shadow: 0 30px 60px -24px rgba(40, 28, 10, .45);
+}
+.cats-menu a { border-radius: 12px; }
+/* the categories menu is a wide glass panel ("glassy navbar" mega menu): tiles with the category picture */
+.cats-menu { width: min(760px, calc(100vw - 32px)); padding: 14px; }
+.cats-menu .catlist { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.cats-menu .catlist a { padding: 10px 12px; font-weight: 500; border-radius: 14px; }
+.cats-menu .catlist a::after { content: none; }
+.cats-menu .catlist a:hover, .cats-menu .catlist a:focus-visible { background: rgba(11, 42, 111, .06); color: var(--navy); padding-left: 12px; }
+.cats-menu .catlist .ci { width: 38px; height: 38px; border-radius: 12px; box-shadow: 0 1px 0 rgba(255, 255, 255, .9) inset; }
+.cats-menu .catlist .ci .pic { width: 28px; height: 28px; }
+.mega-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+.mega-foot a { padding: 8px 14px; border-radius: 999px; font-size: 13px; font-weight: 500; color: var(--navy); }
+.mega-foot a:hover { background: rgba(11, 42, 111, .06); }
+.mega-foot .mega-cta { margin-left: auto; background: var(--ink); color: #fff; font-weight: 700; }
+.mega-foot .mega-cta:hover { background: var(--navy); }
+@media (max-width: 960px) { .cats-menu .catlist { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ---------- surfaces ---------- */
+.panel { background: var(--card); border: 1px solid var(--glass-edge); box-shadow: var(--warm-shadow); border-radius: 20px; }
+.card { background: rgba(255, 255, 255, .84); border: 1px solid var(--glass-edge); border-radius: 18px; box-shadow: var(--warm-shadow); }
+.card:hover { box-shadow: 0 1px 0 #fff inset, 0 24px 40px -22px rgba(74, 52, 20, .55); }
+.card .media { background: radial-gradient(circle at 50% 40%, #fff 0%, color-mix(in srgb, var(--c, #e7d9c1) 12%, #f7f1e6) 78%); }
+.card .tag-off, .card .tag-new { border-radius: 999px; padding: 2px 8px; }
+
+/* ---------- buttons and fields: rounded, the shop red stays the main action ---------- */
+.btn { border-radius: 999px; }
+.btn.line { background: rgba(255, 255, 255, .8); }
+input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea { border-radius: 12px; }
+.search input, .search select { border-radius: 0; }
+.search select { border-radius: 999px 0 0 999px; }
+
+/* ---------- side drawer (phones): frosted ---------- */
+.drawer { background: rgba(250, 246, 239, .94); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); border-radius: 0 24px 24px 0; }
+.drawer-head { border-radius: 0 24px 0 0; }
+
+/* ---------- messages ---------- */
+.toast { border-radius: 999px; background: rgba(10, 20, 48, .92); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+
+/* ---------- footer: the ink band, with rounded top corners ---------- */
+.footer { border-radius: 28px 28px 0 0; margin-left: 12px; margin-right: 12px; }
+
+/* ---------- phones ---------- */
+@media (max-width: 680px) {
+  .header { margin: 6px 8px 0; top: 6px; border-radius: 20px; }
+  .navbar-inner { width: calc(100% - 16px); }
+  .footer { margin-left: 0; margin-right: 0; border-radius: 24px 24px 0 0; }
+  /* the quick bar floats as a frosted pill */
+  body { padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
+  .bottom-nav {
+    left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); padding-bottom: 0;
+    border-radius: 22px; border: 1px solid var(--glass-edge);
+    background: rgba(255, 255, 255, .86);
+    -webkit-backdrop-filter: blur(18px) saturate(160%); backdrop-filter: blur(18px) saturate(160%);
+    box-shadow: 0 18px 40px -18px rgba(40, 28, 10, .5);
+  }
+  .bottom-nav a { color: #3e4659; }   /* dark enough to read on frosted glass over any page colour (AA) */
+  .bottom-nav a.on { color: #c01116; }
+  .to-top { bottom: calc(92px + env(safe-area-inset-bottom, 0px)); }
+  .toast { bottom: calc(94px + env(safe-area-inset-bottom, 0px)); }
+  html { scroll-padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px)); }
+}
+
+/* less transparency where the device asks for it */
+@media (prefers-reduced-transparency: reduce) {
+  .header::before, .navbar-inner, .cats-menu, .drawer, .bottom-nav, .suggest, .toast { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .header::before { background: var(--navy); }
+  .navbar-inner, .cats-menu, .bottom-nav, .suggest { background: #fff; }
+}
+
+/* =========================================================
+   Liquid Glass finish (UI UX Pro Max "liquid-glass" style + Apple's material rules):
+   glass is for navigation and controls, content stays on its own calm layer; every glass edge catches light
+   from the top-left (a specular rim); controls answer a press; opaque fallback when the device asks for it.
+   ========================================================= */
+.navbar-inner { position: relative; }
+.header::after, .navbar-inner::after, .cats-menu::after, .bottom-nav::after, .drawer::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none; z-index: 1;
+  background: linear-gradient(135deg, rgba(255, 255, 255, .9), rgba(255, 255, 255, .18) 32%, rgba(255, 255, 255, 0) 58%, rgba(255, 255, 255, .5));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+.header::after { background: linear-gradient(135deg, rgba(255, 255, 255, .55), rgba(255, 255, 255, .08) 35%, rgba(255, 255, 255, 0) 60%, rgba(255, 255, 255, .28)); }
+.drawer::after { position: fixed; top: 0; bottom: 0; left: 0; width: inherit; }
+
+/* a press is felt: controls dip slightly (transform only, so nothing around them moves) */
+.btn, .navbar a, .mega-foot a, .hbtn, .bottom-nav a, .heart, .add-mini button, .cats-menu .catlist a { transition: background-color .18s, color .18s, box-shadow .2s, transform .12s; }
+.btn:active:not(:disabled), .navbar a:active, .mega-foot a:active, .hbtn:active, .bottom-nav a:active, .add-mini button:active:not(:disabled), .cats-menu .catlist a:active { transform: scale(.97); }
+.mega-foot a { display: inline-flex; align-items: center; gap: 6px; }
+.mega-foot svg { width: 16px; height: 16px; color: var(--red); }
+
+/* touch screens: every control is at least 44 × 44 px (the skill's "touch & interaction" rule) */
+@media (pointer: coarse) {
+  .burger, .icon-btn { width: 44px; height: 44px; }
+  .hbtn { min-width: 44px; min-height: 44px; justify-content: center; }
+  .search { height: 46px; }   /* 44 px inside its 1 px glass edge */
+  .drawer .catlist a { min-height: 44px; }
+  .btn { min-height: 44px; }
+  .add-mini button { min-height: 44px; }
+  .heart::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; }   /* 32px icon, 44px target */
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]), select { min-height: 44px; }
+  .search input, .search select { min-height: 0; }
+  .logo { min-height: 44px; }
+  .pw-eye::after { content: ""; position: absolute; inset: -4px; border-radius: 12px; }   /* 36px icon, 44px target */
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn:active, .navbar a:active, .mega-foot a:active, .hbtn:active, .bottom-nav a:active, .add-mini button:active, .cats-menu .catlist a:active { transform: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .header::after, .navbar-inner::after, .cats-menu::after, .bottom-nav::after, .drawer::after { display: none; }
+}
+
+/* =========================================================
+   Deep glass: the small parts too (fields, buttons, tiles, crumbs, drawer rows, footer).
+   UI UX Pro Max "glassmorphism" checklist: blur 10–20 px on surfaces, translucent white, a 1 px light edge,
+   a light reflection on top, depth by shadow; text contrast 4.5:1; 8 px+ between touch targets.
+   ========================================================= */
+:root {
+  --g-fill: linear-gradient(180deg, rgba(255, 255, 255, .66), rgba(255, 255, 255, .48));
+  --g-edge: rgba(255, 255, 255, .92);
+  --g-lift: inset 0 1px 0 rgba(255, 255, 255, .95), inset 0 -1px 0 rgba(110, 86, 52, .06), 0 10px 24px -18px rgba(74, 52, 20, .5);
+  --g-well: inset 0 1px 2px rgba(74, 52, 20, .10), 0 1px 0 rgba(255, 255, 255, .9);
+}
+
+/* surfaces: frosted (one blur per panel; product cards stay unblurred for speed) */
+.panel { background: linear-gradient(180deg, rgba(255, 255, 255, .70), rgba(255, 255, 255, .56)); -webkit-backdrop-filter: blur(16px) saturate(140%); backdrop-filter: blur(16px) saturate(140%); }
+.card { background: linear-gradient(180deg, rgba(255, 255, 255, .86), rgba(255, 255, 255, .74)); }
+
+/* fields: a glass well, brighter and ringed when in use */
+.form input, .form select, .form textarea, .filters input:not([type=checkbox]):not([type=radio]), .filters select, .listing select, input[type=email], input[type=password], input[type=tel], input[type=text]:not(#searchInput), input[type=number], textarea, select:not(#searchCat) {
+  background: var(--g-fill); border: 1px solid var(--g-edge); box-shadow: var(--g-well); color: var(--text);
+  transition: border-color .18s, box-shadow .2s, background-color .18s;
+}
+.form input:focus, .form select:focus, .form textarea:focus, input:focus:not(#searchInput), select:focus:not(#searchCat), textarea:focus {
+  background: rgba(255, 255, 255, .9); border-color: var(--navy); box-shadow: var(--g-well), 0 0 0 3px rgba(11, 42, 111, .16); outline: none;
+}
+::placeholder { color: #6b7385; opacity: 1; }
+
+/* the search in the header: clear glass on the navy bar */
+.search { background: rgba(255, 255, 255, .16); border: 1px solid rgba(255, 255, 255, .34); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28), 0 10px 22px -16px rgba(0, 0, 0, .6); }
+.search:focus-within { background: rgba(255, 255, 255, .24); border-color: rgba(255, 255, 255, .7); }
+.search input { color: #fff; }
+.search input::placeholder { color: rgba(255, 255, 255, .86); }
+.search select { background: rgba(255, 255, 255, .14); color: #fff; border-right: 1px solid rgba(255, 255, 255, .22); }
+.search select option { color: var(--text); background: #fff; }
+.search > button { background: linear-gradient(180deg, #f0353b, #c4101a); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .35), inset 1px 0 0 rgba(255, 255, 255, .12); }
+.search > button:hover { background: linear-gradient(180deg, #ff4a50, #d7141a); }
+
+/* buttons: glossy glass — a light top edge, the colour below it */
+.btn { background: linear-gradient(180deg, #ef3a40, #c8111a); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .34), inset 0 -1px 0 rgba(0, 0, 0, .12), 0 10px 22px -14px rgba(215, 20, 26, .85); }
+.btn:hover { background: linear-gradient(180deg, #ff474d, #d7141a); }
+.btn.navy { background: linear-gradient(180deg, #1d46a3, #0a2463); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .26), inset 0 -1px 0 rgba(0, 0, 0, .18), 0 10px 22px -14px rgba(11, 42, 111, .9); }
+.btn.navy:hover { background: linear-gradient(180deg, #2552b8, #0b2a6f); }
+.btn.line { background: var(--g-fill); color: var(--navy); border: 1px solid rgba(11, 42, 111, .55); box-shadow: var(--g-lift); }
+.btn.line:hover { background: var(--navy); color: #fff; }
+.btn.ghost { background: rgba(255, 255, 255, .12); border: 1px solid rgba(255, 255, 255, .4); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.btn:disabled, .btn[disabled] { background: rgba(160, 160, 170, .5); box-shadow: none; }
+/* "Continue with Google": light frosted, keeping Google's grey outline */
+.g-btn { background: linear-gradient(180deg, rgba(255, 255, 255, .94), rgba(255, 255, 255, .8)); border-radius: 999px; box-shadow: var(--g-lift); }
+.g-btn:hover { background: #fff; }
+
+/* category tiles: separate glass tiles with air between them */
+.catgrid { gap: 10px; padding: 10px; }
+.catgrid .cat { border: 1px solid var(--g-edge); border-radius: 18px; background: var(--g-fill); box-shadow: var(--g-lift); }
+.catgrid .cat:hover { background: rgba(255, 255, 255, .86); box-shadow: inset 0 1px 0 #fff, 0 18px 30px -18px rgba(74, 52, 20, .6); }
+.cat .ci { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .95), inset 0 -6px 12px -6px rgba(74, 52, 20, .18), 0 8px 16px -10px rgba(74, 52, 20, .45); }
+@media (max-width: 680px) { .catgrid { gap: 8px; padding: 8px; } }
+
+/* breadcrumbs: a small glass pill */
+.crumbs { width: fit-content; max-width: 100%; padding: 2px 12px; border-radius: 999px; background: rgba(255, 255, 255, .5); border: 1px solid var(--g-edge); box-shadow: var(--g-lift); color: #4e5668; }
+
+/* small controls */
+.qty { background: var(--g-fill); border: 1px solid var(--g-edge); border-radius: 999px; box-shadow: var(--g-lift); }
+.pay-opt { background: var(--g-fill); border: 1px solid var(--g-edge); border-radius: 14px; box-shadow: var(--g-lift); }
+.pay-opt:has(input:checked) { border-color: var(--navy); background: rgba(255, 255, 255, .9); box-shadow: var(--g-lift), 0 0 0 3px rgba(11, 42, 111, .14); }
+.empty { border-radius: 20px; }
+
+/* phone drawer: frosted rows */
+.drawer-head { background: linear-gradient(135deg, rgba(24, 64, 152, .96), rgba(8, 26, 72, .96)); box-shadow: inset 0 -1px 0 rgba(255, 255, 255, .14); }
+.drawer .catlist { padding: 6px 10px; display: grid; gap: 6px; }
+.drawer .catlist a { border-radius: 14px; background: var(--g-fill); border: 1px solid var(--g-edge); box-shadow: var(--g-lift); }
+.drawer .catlist a:hover { padding-left: 14px; background: rgba(255, 255, 255, .9); }
+#drawerLinks .catlist + .catlist { border-top: 0 !important; }
+
+/* the announcement strip and the footer: ink glass */
+.topbar { background: rgba(6, 12, 32, .9); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+.footer { margin: 30px 12px 12px; border-radius: 28px; background: linear-gradient(180deg, rgba(16, 30, 70, .94), rgba(7, 14, 36, .97)); -webkit-backdrop-filter: blur(18px) saturate(140%); backdrop-filter: blur(18px) saturate(140%); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .16), 0 30px 60px -30px rgba(7, 14, 36, .8); border: 1px solid rgba(255, 255, 255, .08); }
+.footer-bottom { border-top-color: rgba(255, 255, 255, .12); }
+.pay span { background: rgba(255, 255, 255, .12); color: #fff; border: 1px solid rgba(255, 255, 255, .28); border-radius: 999px; padding: 5px 10px; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .2); }
+@media (max-width: 680px) { .footer { margin: 24px 8px 8px; border-radius: 24px; } }
+
+@media (prefers-reduced-transparency: reduce) {
+  .panel, .footer, .topbar, .btn.ghost { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .panel { background: #fffdf9; }
+  .search { background: #1f3f8c; }
+}
+
+/* =========================================================
+   Numbers: lining figures everywhere. Playfair Display draws "old-style" digits by default (3, 4, 5, 7, 9 drop
+   below the line, 6 and 8 rise above it), which made prices and counts look uneven. "lnum" puts every digit on
+   the same line; it is inherited, and it combines with tabular-nums where that is set.
+   ========================================================= */
+body { font-feature-settings: "lnum" 1; }
+
+/* =========================================================
+   Motion (js/motion.js): one shared timing set; arrivals decelerate, departures accelerate.
+   ========================================================= */
+:root { --m-fast: .18s; --m-mid: .32s; --m-slow: .75s; --m-out: cubic-bezier(.22, 1, .36, 1); --m-in-out: cubic-bezier(.55, 0, .2, 1); }
+
+/* add to cart: the flying picture, the cart's answer, the button's answer */
+.fly-ghost { position: fixed; z-index: 400; pointer-events: none; border-radius: 18px; overflow: hidden; background: rgba(255, 255, 255, .92); box-shadow: 0 18px 36px -16px rgba(40, 28, 10, .55), inset 0 1px 0 #fff; will-change: transform, opacity; }
+.fly-ghost > * { position: static !important; width: 100% !important; height: 100% !important; inset: auto !important; object-fit: contain; opacity: 1 !important; transform: none !important; }
+.cart-hit { animation: cart-hit .55s var(--m-out); }
+.cart-hit svg { animation: cart-tilt .55s var(--m-out); }
+@keyframes cart-hit { 30% { transform: scale(1.18); } 60% { transform: scale(.94); } }
+@keyframes cart-tilt { 30% { transform: rotate(-12deg); } 60% { transform: rotate(6deg); } }
+.just-added { background: linear-gradient(180deg, #22a04b, #157a37) !important; color: #fff !important; border-color: #157a37 !important; }
+.ok-tick { width: 16px; height: 16px; margin-right: 6px; vertical-align: -3px; fill: none; stroke: currentColor; stroke-width: 2.6; stroke-dasharray: 24; stroke-dashoffset: 24; animation: tick-draw .35s .05s var(--m-out) forwards; }
+@keyframes tick-draw { to { stroke-dashoffset: 0; } }
+
+/* wishlist heart */
+[data-wish].pop { animation: heart-pop .5s var(--m-out); }
+[data-wish].pop svg { animation: heart-fill .5s var(--m-out); }
+@keyframes heart-pop { 0% { transform: scale(1); } 35% { transform: scale(1.32); } 65% { transform: scale(.92); } 100% { transform: scale(1); } }
+@keyframes heart-fill { 35% { color: var(--red); } }
+
+/* the delivery truck with its parcel */
+.btn.driving { position: relative; overflow: hidden; }
+.truck-lane { position: absolute; inset: 0; pointer-events: none; transform: translateX(-100%); }
+.btn .truck, .truck { position: absolute; right: 0; top: 50%; width: 52px; height: 30px; margin-top: -15px; overflow: visible; }   /* beats '.btn svg' (18px) */
+.truck .t-box { fill: #fff; } .truck .t-cab { fill: #ffe3e4; } .truck .t-win { fill: #7c1015; opacity: .55; }
+.truck .t-parcel { fill: #c9924b; } .truck .t-tape { stroke: #f3d9ae; stroke-width: 2; }
+.truck .t-wheel { fill: #1c2233; stroke: #fff; stroke-width: 1.5; }
+.btn.driving:not(.loop) { color: transparent !important; }
+.btn.driving:not(.loop) .truck-lane { animation: truck-go .9s var(--m-in-out) forwards; }
+.btn.driving .truck { animation: truck-bob .26s ease-in-out infinite alternate; }
+@keyframes truck-go { to { transform: translateX(100%); } }
+@keyframes truck-bob { to { transform: translateY(-1.5px); } }
+/* while the order is being placed: a smaller truck drives along the bottom of the button, the words stay */
+.btn.driving.loop .truck-lane { animation: truck-go 1.6s linear infinite; }
+.btn.driving.loop .truck { top: auto; bottom: 3px; margin: 0; width: 30px; height: 18px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .fly-ghost, .truck-lane { display: none; }
+  .cart-hit, .cart-hit svg, [data-wish].pop, [data-wish].pop svg, .truck { animation: none !important; }
+  .ok-tick { animation: none; stroke-dashoffset: 0; }
+}
+
+/* phones: logo, account, wishlist and cart on one row (the search below), instead of three rows.
+   The logo may give up a little width; if a very narrow phone still cannot fit it, the name is shortened with "…" */
+@media (max-width: 680px) {
+  .header-inner { column-gap: 6px; }
+  .header .logo { flex: 1 1 0; min-width: 0; }
+  .header .logo > span { min-width: 0; overflow: hidden; }
+  .header .logo b, .header .logo small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .header-actions { gap: 0; flex: none; }
+  .header-actions .hbtn { padding-left: 4px; padding-right: 4px; }
+  .header .logo { gap: 8px; }
+  .header .logo img { width: 34px; height: 34px; }
+  .header .logo b { font-size: clamp(12px, 3.6vw, 16px); }   /* the whole name fits on 360px phones and up */
+  .header .header-inner { padding-left: 10px; padding-right: 10px; }
+  .header .logo small { letter-spacing: .3em; }
+}

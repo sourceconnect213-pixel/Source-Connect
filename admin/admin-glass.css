@@ -1,0 +1,290 @@
+/* =========================================================
+   Seller Center — "cream harbour glass" theme (the same family as the shop's site-glass.css)
+   Loaded after admin.css. It changes only the look (colour, depth, shape); every size rule, grid and behaviour
+   stays in admin.css, so removing this file brings back the earlier look exactly.
+   Ideas taken from the reference videos: a floating frosted sidebar with a white "tab" for the open page,
+   one large light glass canvas for the work area, soft glass cards and dark pill actions —
+   all in the shop's own navy and red.
+   ========================================================= */
+:root {
+  --night: #061233;          /* deep harbour navy: the sidebar */
+  --cream: #f3ebdd;          /* the logo's cream: the backdrop */
+  --sand: #e7d9c1;
+  --glass: rgba(248, 250, 255, .86);
+  --glass-line: rgba(255, 255, 255, .55);
+  --glass-edge: rgba(11, 42, 111, .10);
+  --lift: 0 1px 0 rgba(255, 255, 255, .9) inset, 0 18px 40px -28px rgba(6, 18, 51, .55);
+  --radius: 16px;
+}
+
+/* the backdrop: the logo's cream, lit by a soft red and a soft navy glow */
+body {
+  background-color: var(--cream);
+  background-image:
+    radial-gradient(60vw 55vh at 92% 0%, rgba(215, 20, 26, .14), transparent 60%),
+    radial-gradient(60vw 65vh at 0% 100%, rgba(11, 42, 111, .18), transparent 62%),
+    linear-gradient(170deg, #f7f1e6 0%, var(--cream) 45%, var(--sand) 100%);
+  background-attachment: fixed;
+}
+
+/* ---------- sidebar: a floating frosted panel ---------- */
+@media (min-width: 901px) {
+  .side { margin: 12px 0 12px 12px; top: 12px; height: calc(100vh - 24px); border-radius: 26px; }
+}
+.side {
+  background: linear-gradient(180deg, rgba(24, 64, 152, .94), rgba(8, 24, 68, .96));   /* deep navy glass: on cream it must stay dark enough to read */
+  -webkit-backdrop-filter: blur(22px) saturate(140%); backdrop-filter: blur(22px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, .14);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .18) inset, 0 30px 60px -30px rgba(0, 0, 0, .7);
+  scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .2) transparent;
+}
+.side-brand img { box-shadow: 0 0 0 3px rgba(255, 255, 255, .18); }
+.side-label { color: rgba(205, 216, 242, .62); }
+.side nav a { border-radius: 14px; color: #dfe7fa; border: 1px solid transparent; }
+.side nav a:hover { background: rgba(255, 255, 255, .09); border-color: rgba(255, 255, 255, .10); }
+/* the open page: a white tab, the shop red marks it */
+.side nav a.active {
+  background: #fff; color: var(--navy); font-weight: 600;
+  box-shadow: 0 12px 24px -14px rgba(0, 0, 0, .65), inset 3px 0 0 var(--red);
+}
+.side nav a.active svg { color: var(--red); }
+.side nav a.active .pill { background: var(--red); color: #fff; }
+.side nav a:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.side-foot .btn.ghost { border-radius: 14px; background: rgba(255, 255, 255, .06); }
+.side-foot .btn.ghost:hover { background: rgba(255, 255, 255, .14); }
+
+/* phones and tablets: the sidebar slides in as a floating panel */
+@media (max-width: 900px) {
+  .side { left: 10px; top: 10px; height: calc(100vh - 20px); border-radius: 24px; transform: translateX(calc(-100% - 20px));
+    background: linear-gradient(180deg, rgba(25, 62, 145, .92), rgba(7, 20, 58, .96)); }
+  .side.open { transform: none; box-shadow: 0 0 0 100vmax rgba(3, 8, 24, .55); }
+}
+
+/* ---------- the work area: one large light glass canvas ---------- */
+.main {
+  margin: 12px; min-height: calc(100vh - 24px); border-radius: 28px; overflow: clip;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .80), rgba(252, 249, 243, .74));
+  -webkit-backdrop-filter: blur(24px) saturate(140%); backdrop-filter: blur(24px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, .85);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .95) inset, 0 40px 80px -44px rgba(74, 52, 20, .55);
+}
+@media (max-width: 900px) { .main { margin: 8px; min-height: calc(100vh - 16px); border-radius: 22px; } }
+.top {
+  background: rgba(255, 252, 246, .74);
+  -webkit-backdrop-filter: blur(16px) saturate(150%); backdrop-filter: blur(16px) saturate(150%);
+  border-bottom: 1px solid var(--glass-edge);
+}
+.top h2 { color: var(--ink); letter-spacing: -.01em; }
+.menu-btn { background: var(--ink); color: #fff; border-radius: 14px; }
+.menu-btn:hover { background: var(--navy); }
+
+/* ---------- cards ---------- */
+.panel, .stat, .table-wrap, .item-card {
+  background: var(--glass); border: 1px solid var(--glass-line);
+  box-shadow: var(--lift), 0 0 0 1px var(--glass-edge);
+}
+.panel { border-radius: 22px; }
+.stat { border-radius: 20px; }
+.stat::after { opacity: .12; width: 110px; height: 110px; right: -38px; top: -38px; }
+.stat b { color: var(--ink); }
+.table-wrap { border-radius: 18px; }
+th { background: rgba(238, 242, 250, .92); }
+tbody tr:hover { background: rgba(11, 42, 111, .035); }
+.item-card { border-radius: 20px; }
+/* a panel inside a panel stays quiet */
+.panel .panel, .panel .table-wrap, .modal-box .table-wrap { box-shadow: none; background: #fff; border-color: var(--line); }
+
+/* ---------- buttons: pills; the main action keeps the shop red, secondary dark actions are ink ---------- */
+.btn { border-radius: 999px; }
+.btn.sm { border-radius: 999px; }
+.btn:not(.primary):not(.dark):not(.danger):not(.ghost):not(.link) { background: rgba(255, 255, 255, .85); }
+.btn.primary { box-shadow: 0 10px 22px -12px rgba(215, 20, 26, .8); }
+.btn.dark { background: var(--ink); border-color: var(--ink); }
+.btn.dark:hover { background: var(--navy); }
+.btn:focus-visible, .icon-btn:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; }
+.filters .chip { border-radius: 999px; background: rgba(255, 255, 255, .85); }
+.filters .chip.on { background: var(--ink); border-color: var(--ink); }
+input, select, textarea { border-radius: 12px; }
+
+/* ---------- pop-ups and messages ---------- */
+.modal .scrim { background: rgba(4, 11, 34, .55); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.modal-box { border-radius: 24px; box-shadow: 0 40px 90px -30px rgba(0, 0, 0, .6); }
+.toast { background: rgba(6, 18, 51, .92); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, .12); }
+.pv-fab { background: var(--ink); }
+
+/* ---------- live preview pane sits on the same night backdrop ---------- */
+.pv { background: rgba(223, 228, 238, .92); }
+
+/* ---------- sign-in: cream backdrop with the two glows; the card is frosted glass ---------- */
+.login { background: linear-gradient(170deg, #f7f1e6, var(--cream) 50%, var(--sand)); }
+.login-bg { background: radial-gradient(circle at 28% 30%, rgba(11, 42, 111, .32), transparent 46%), radial-gradient(circle at 72% 70%, rgba(215, 20, 26, .22), transparent 42%); }
+.login-powered { color: var(--muted); }
+.login-card {
+  background: rgba(255, 255, 255, .9);
+  -webkit-backdrop-filter: blur(20px) saturate(140%); backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, .6); border-radius: 28px;
+}
+
+/* no glass blur where the device asks for less transparency or motion */
+@media (prefers-reduced-transparency: reduce) {
+  .side, .top, .toast, .login-card, .modal .scrim, .main { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .main { background: #fbf8f2; }
+  .side { background: #0b2a6f; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .side { transition: none; }
+}
+
+/* ---------- menu: find a page, narrow mode, the signed-in person (from the "glassy sidebar" reference) ---------- */
+.side-mini-btn { margin-left: auto; width: 30px; height: 30px; flex: none; border-radius: 10px; display: grid; place-items: center; color: #dfe7fa; background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .12); }
+.side-mini-btn:hover { background: rgba(255, 255, 255, .16); }
+.side-mini-btn svg { width: 16px; height: 16px; transition: transform .3s var(--ease); }
+.side-mini-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+@media (max-width: 900px) { .side-mini-btn { display: none; } }
+/* the menu column scrolls: its parts keep their size instead of being squeezed */
+.side > * { flex-shrink: 0; }
+.side-search { display: flex; align-items: center; gap: 8px; padding: 0 10px; height: 42px; border-radius: 14px; background: rgba(255, 255, 255, .10); border: 1px solid rgba(255, 255, 255, .14); color: #dfe7fa; font-weight: 400; }
+.side-search:focus-within { background: rgba(255, 255, 255, .16); border-color: rgba(255, 255, 255, .45); }
+.side-search svg { width: 17px; height: 17px; flex: none; opacity: .85; }
+.side-search input { flex: 1; min-width: 0; padding: 0; border: 0; background: transparent; color: #fff; font-size: 13.5px; box-shadow: none !important; }
+.side-search input::placeholder { color: rgba(223, 231, 250, .72); }
+.side-search input::-webkit-search-cancel-button { filter: invert(1); }
+.side-search kbd { font: 600 10.5px/1 'Roboto', sans-serif; padding: 4px 6px; border-radius: 6px; background: rgba(255, 255, 255, .14); color: #dfe7fa; white-space: nowrap; }
+@media (pointer: coarse) { .side-search kbd { display: none; } }
+.side-none { margin: -8px 12px 0; color: #dfe7fa; font-size: 12.5px; }
+#sideNav a.nf, #sideNav .side-label.nf { display: none; }
+.side-me { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 16px; background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .12); color: #fff; min-width: 0; }
+.side-av { width: 38px; height: 38px; flex: none; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 14px; color: #fff; background: linear-gradient(135deg, var(--red), #8f0c10); box-shadow: 0 0 0 2px rgba(255, 255, 255, .7); }
+.side-me div { min-width: 0; }
+.side-me b { display: block; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-me small { color: rgba(223, 231, 250, .78); font-size: 11.5px; }
+
+/* narrow menu: icons only (computers) */
+@media (min-width: 901px) {
+  .shell.side-mini { grid-template-columns: 92px minmax(0, 1fr); }
+  .shell.side-mini.has-pv { grid-template-columns: 92px minmax(0, 1fr) var(--pvw, 50%); }
+  .shell.side-mini.has-pv.pv-full { grid-template-columns: 92px minmax(0, 1fr) var(--pvw, 70%); }
+  .side-mini .side { padding: 18px 10px; align-items: center; }
+  .side-mini .side-brand { flex-direction: column; padding: 0; gap: 10px; }
+  .side-mini .side-brand > div, .side-mini .side-search, .side-mini .side-none, .side-mini .side-label,
+  .side-mini .side-foot .btn, .side-mini .side-powered, .side-mini .side-me div { display: none; }
+  .side-mini .side-mini-btn { margin: 0; }
+  .side-mini .side-mini-btn svg { transform: rotate(180deg); }
+  .side-mini .side nav { width: 100%; }
+  .side-mini .side nav a { position: relative; justify-content: center; font-size: 0; gap: 0; padding: 12px 0; }
+  .side-mini .side nav a svg { width: 21px; height: 21px; }
+  .side-mini .side nav a .pill { position: absolute; top: 3px; right: 6px; font-size: 9.5px; padding: 0 5px; margin: 0; }
+  .side-mini .side nav a .pill.easy { display: none; }
+  .side-mini .side-foot { width: 100%; justify-items: center; }
+  .side-mini .side-me { padding: 6px; justify-content: center; }
+}
+@media (min-width: 901px) and (max-width: 1100px) {
+  .shell.side-mini.has-pv, .shell.side-mini.has-pv.pv-full { grid-template-columns: 92px minmax(0, 1fr); }
+}
+
+/* ---------- dashboard: the first number is the highlight card (from the "glassy dashboard" reference) ---------- */
+.stats > .stat:first-child { background: linear-gradient(150deg, #123a91, var(--navy) 55%, #081c4d); border-color: rgba(255, 255, 255, .2); color: #fff; box-shadow: 0 20px 36px -22px rgba(11, 42, 111, .9); }
+.stats > .stat:first-child small { color: rgba(255, 255, 255, .78); }
+.stats > .stat:first-child b { color: #fff; }
+.stats > .stat:first-child::after { background: var(--red); opacity: .35; }
+
+/* =========================================================
+   Liquid Glass finish (UI UX Pro Max "liquid-glass" + Apple's material rules): specular rims on the glass
+   chrome, a felt press on controls, 44 px touch targets, opaque fallback.
+   ========================================================= */
+.main, .side-search, .side-me { position: relative; }
+.side::after, .main::after, .login-card::after, .modal-box::after, .side-search::after, .side-me::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none;
+  background: linear-gradient(135deg, rgba(255, 255, 255, .9), rgba(255, 255, 255, .18) 32%, rgba(255, 255, 255, 0) 58%, rgba(255, 255, 255, .5));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+.side::after, .side-search::after, .side-me::after { background: linear-gradient(135deg, rgba(255, 255, 255, .5), rgba(255, 255, 255, .06) 35%, rgba(255, 255, 255, 0) 60%, rgba(255, 255, 255, .22)); }
+.modal-box::after { position: sticky; display: block; height: 0; inset: auto; padding: 0; }   /* the pop-up scrolls inside: no rim there */
+#editSite svg { width: 16px; height: 16px; }
+.btn, .side nav a, .icon-btn, .filters .chip { transition: background-color .18s, color .18s, border-color .18s, box-shadow .2s, transform .12s; }
+.btn:active:not(:disabled), .side nav a:active, .icon-btn:active, .filters .chip:active { transform: scale(.97); }
+@media (pointer: coarse) {
+  .side nav a { min-height: 44px; }
+  .menu-btn, .icon-btn { width: 44px; height: 44px; }
+  .btn:not(.sm) { min-height: 44px; }
+  .btn.sm { position: relative; }
+  .btn.sm::after { content: ""; position: absolute; inset: -8px -3px; }   /* small table buttons: 44 px to a finger */
+  .side-search input { height: 100%; }
+  #menuBtn { flex: none; }
+  .pw-eye::after { content: ""; position: absolute; inset: -4px; border-radius: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn:active, .side nav a:active, .icon-btn:active, .filters .chip:active { transform: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .side::after, .main::after, .login-card::after, .modal-box::after, .side-search::after, .side-me::after { display: none; }
+}
+.ico-in { width: 15px; height: 15px; vertical-align: -2px; margin-right: 5px; flex: none; }
+/* brand line under "SC Global": one line, never broken over three (the full name and role sit in the card below) */
+.side-brand > div { min-width: 0; }
+.side-brand small { display: block; letter-spacing: .14em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #ff8a8d; }
+@media (pointer: coarse) { .checklist .ck a:not(.btn) { display: inline-flex; align-items: center; min-height: 44px; } }
+
+/* =========================================================
+   Deep glass: fields, buttons, chips, tags, switches, table head, pop-ups — the small parts too.
+   (UI UX Pro Max "glassmorphism": translucent white, 1 px light edge, top reflection, depth; contrast 4.5:1.)
+   ========================================================= */
+:root {
+  --g-fill: linear-gradient(180deg, rgba(255, 255, 255, .7), rgba(255, 255, 255, .52));
+  --g-edge: rgba(255, 255, 255, .95);
+  --g-lift: inset 0 1px 0 rgba(255, 255, 255, .95), inset 0 -1px 0 rgba(110, 86, 52, .06), 0 10px 22px -18px rgba(74, 52, 20, .5);
+  --g-well: inset 0 1px 2px rgba(74, 52, 20, .10), 0 1px 0 rgba(255, 255, 255, .9);
+}
+.content input:not([type=checkbox]):not([type=radio]):not([type=color]):not([type=range]):not([type=file]), .content select, .content textarea,
+.modal input:not([type=checkbox]):not([type=radio]):not([type=color]):not([type=range]):not([type=file]), .modal select, .modal textarea,
+.login-card input {
+  background: var(--g-fill); border: 1px solid var(--line); box-shadow: var(--g-well);
+  transition: border-color .18s, box-shadow .2s, background-color .18s;
+}
+.content input:focus, .content select:focus, .content textarea:focus, .modal input:focus, .modal select:focus, .modal textarea:focus, .login-card input:focus {
+  background: rgba(255, 255, 255, .95); border-color: var(--navy); box-shadow: var(--g-well), 0 0 0 3px rgba(11, 42, 111, .16);
+}
+::placeholder { color: #6b7385; opacity: 1; }
+
+/* buttons: glossy glass */
+.btn:not(.primary):not(.dark):not(.danger):not(.ghost):not(.link) { background: var(--g-fill); border-color: rgba(11, 42, 111, .18); box-shadow: var(--g-lift); }
+.btn:not(.primary):not(.dark):not(.danger):not(.ghost):not(.link):hover { background: rgba(255, 255, 255, .95); border-color: var(--navy); }
+.btn.primary { background: linear-gradient(180deg, #ef3a40, #c8111a); border-color: rgba(160, 10, 16, .6); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .34), inset 0 -1px 0 rgba(0, 0, 0, .12), 0 10px 22px -14px rgba(215, 20, 26, .85); }
+.btn.primary:hover { background: linear-gradient(180deg, #ff474d, #d7141a); }
+.btn.dark { background: linear-gradient(180deg, #1b2a52, #070f28); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), 0 10px 22px -14px rgba(7, 15, 40, .9); }
+.btn.danger { background: rgba(255, 255, 255, .6); box-shadow: var(--g-lift); }
+.btn.danger:hover { background: linear-gradient(180deg, #ef3a40, #c8111a); }
+.icon-btn:hover { background: rgba(255, 255, 255, .7); box-shadow: var(--g-lift); }
+
+/* chips, tags, switches */
+.filters .chip { background-color: rgba(255, 255, 255, .6); background-image: linear-gradient(180deg, rgba(255, 255, 255, .5), rgba(255, 255, 255, 0)); border-color: var(--g-edge); box-shadow: var(--g-lift); }
+.filters .chip.on { background-color: #070f28; background-image: linear-gradient(180deg, #1b2a52, #070f28); color: #fff; border-color: #070f28; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22); }
+.tag { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .8), 0 0 0 1px rgba(11, 42, 111, .06); }
+.switch i { background: rgba(160, 168, 188, .55); box-shadow: inset 0 1px 3px rgba(5, 11, 28, .25), 0 1px 0 rgba(255, 255, 255, .9); }
+.switch i::after { box-shadow: 0 2px 6px rgba(5, 11, 28, .3), inset 0 -1px 0 rgba(0, 0, 0, .06); }
+.switch input:checked + i { background: linear-gradient(180deg, #ef3a40, #c8111a); }
+
+/* tables, small boxes, pop-ups */
+th { background: linear-gradient(180deg, rgba(255, 255, 255, .85), rgba(240, 236, 228, .85)); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.ship-box { background: var(--g-fill); border-color: var(--g-edge); box-shadow: var(--g-lift); border-radius: 16px; }
+.modal-box { background: linear-gradient(180deg, rgba(255, 255, 255, .92), rgba(252, 249, 243, .88)); -webkit-backdrop-filter: blur(24px) saturate(150%); backdrop-filter: blur(24px) saturate(150%); border: 1px solid var(--g-edge); }
+.modal-head { background: rgba(255, 255, 255, .7); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+.side-search kbd { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .25); }
+
+@media (prefers-reduced-transparency: reduce) {
+  th, .modal-box, .modal-head { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .modal-box { background: #fff; }
+}
+
+/* numbers: lining figures (Playfair's default old-style digits jump above and below the line) */
+body { font-feature-settings: "lnum" 1; }
+
+/* phones: the page title gets the full width; its buttons sit on their own row underneath
+   (titles such as "Import Countries" were broken over two or three lines next to the buttons) */
+@media (max-width: 700px) {
+  .top { flex-wrap: wrap; row-gap: 8px; }
+  .top > div:not(.top-actions) { flex: 1 1 0; min-width: 0; }
+  .top-actions { order: 3; flex: 1 0 100%; margin-left: 0; justify-content: flex-start; }
+  .top-actions:empty { display: none; }
+}

@@ -1,7 +1,7 @@
 /* =========================================================
    Source Connect Global — Marketplace storefront app
    ========================================================= */
-(function () {
+SCG.whenReady(function () {   // waits for the server's catalogue in API mode (immediately in demo mode)
   'use strict';
   var $ = function (s, r) { return (r || document).querySelector(s); };
   var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
@@ -33,22 +33,37 @@
   var tt;
   function toast(msg) { var t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(tt); tt = setTimeout(function () { t.classList.remove('show'); }, 2400); }
   function stars(r) {
-    var out = '<span class="stars" aria-label="' + r + ' out of 5">';
+    var out = '<span class="stars" role="img" aria-label="' + r + ' out of 5">';
     for (var i = 1; i <= 5; i++) out += I.star.replace('<svg', '<svg class="' + (r >= i - .25 ? '' : 'off') + '"');
     return out + '</span>';
   }
-  function ratingLine(p) { return p.reviews ? stars(p.rating) + '<span>(' + p.reviews + ')</span>' : '<span>No ratings yet</span>'; }
+  function ratingLine(p) { return stars(p.reviews ? p.rating : 0) + '<span>(' + (p.reviews || 0) + ')</span>'; }
   function originTag(p) {
     var o = SCG.originInfo(p);
     return o.local ? '<span class="origin local">' + I.truck + 'Ships from Colombo</span>' : '<span class="origin">' + I.plane + esc(o.label) + '</span>';
   }
   function codeBadge(code) { return '<span class="cc">' + esc(code || '') + '</span>'; }
+  /** Bank transfer is offered only once the owner has entered real bank details (the sample account number is not real). */
+  function bankReady() { var s = db.settings; return !!s.payBank && !/0000000000/.test(s.bankDetails || ''); }
   function activeOrigins() { return SCG.origins().filter(function (o) { return o.on; }); }
   function visual(p, color) { return SCG.productVisual(p, color); }
   function catIcon(c) {
-    if (c.image) return '<img src="' + SCG.imgSrc(c.image) + '" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">';
+    if (c.image) return '<img class="ci-img" src="' + SCG.imgSrc(c.image) + '" alt="">';
     var sample = db.products.filter(function (p) { return p.category === c.id; })[0];
     return SCG.productSVG(c.shape, c.icon || (sample && sample.color) || '#0b2a6f', 'solid', '#f3f4f6');
+  }
+  /** Units of this product still for sale in this size. The shop server sends stock per size (p.variants);
+      the offline demo only knows the product total. */
+  function stockFor(p, size) {
+    var vars = (p && p.variants) || [];
+    if (!vars.length) return Math.max(0, +(p && p.stock) || 0);
+    var v = vars.filter(function (x) { return (x.size || '') === (size || ''); })[0];
+    return v ? Math.max(0, +v.stock || 0) : 0;
+  }
+  /** How many of this product (in this size, when stock is per size) are already in the cart. */
+  function inCartFor(p, size, cart) {
+    if (!((p && p.variants) || []).length) return inCart(p.id, cart);
+    return (cart || SCG.getCart()).reduce(function (n, l) { return n + (l.id === p.id && (l.size || '') === (size || '') ? l.qty : 0); }, 0);
   }
   function fmtCount(n) { return n >= 1000 ? (n / 1000).toFixed(1).replace('.0', '') + 'k' : String(n); }
   function sortNewest(a, b) { return (b.createdAt || 0) - (a.createdAt || 0); }
@@ -58,7 +73,8 @@
   function card(p, opts) {
     opts = opts || {};
     var off = SCG.discount(p), wish = SCG.getWish().indexOf(p.id) > -1, imgs = SCG.productImages(p);
-    var soldPct = Math.min(96, 30 + (p.sold % 60));
+    var sold = Math.max(0, +p.sold || 0), units = sold + Math.max(0, +p.stock || 0);
+    var soldPct = sold && units ? Math.max(8, Math.min(100, Math.round(sold / units * 100))) : 0;
     return '<article class="card" data-ed="product" data-id="' + p.id + '" style="--c:' + p.color + '">' +
       '<a class="media' + (imgs[1] ? ' has-alt' : '') + '" href="#p/' + p.id + '" aria-label="' + esc(p.name) + '">' + visual(p) + (imgs[1] ? '<img class="alt" src="' + SCG.imgSrc(imgs[1]) + '" alt="" loading="lazy">' : '') +
       (off ? '<span class="tag-off">-' + off + '%</span>' : (p.badge === 'New' ? '<span class="tag-new">NEW</span>' : '')) + '</a>' +
@@ -67,7 +83,7 @@
       '<div class="price">' + money(p.price) + '</div>' +
       '<div class="was">' + (p.comparePrice ? '<s>' + money(p.comparePrice) + '</s><b>-' + off + '%</b>' : '') + '</div>' +
       (opts.flash
-        ? '<div class="soldbar"><i style="width:' + soldPct + '%"></i><span>' + fmtCount(p.sold) + ' sold</span></div>'
+        ? '<div class="soldbar' + (soldPct < 45 ? ' lo' : '') + '"><i style="width:' + soldPct + '%"></i><span>' + (sold ? fmtCount(sold) + ' sold' : 'New deal') + '</span></div>' + '<div class="meta">' + ratingLine(p) + '</div>'
         : '<div class="meta">' + ratingLine(p) + '</div>' + originTag(p)) +
       (opts.add ? '<div class="add-mini">' + (p.stock > 0 ? '<button data-add="' + p.id + '">Add to Cart</button>' : '<button disabled>Out of stock</button>') + '</div>' : '') +
       '</div></article>';
@@ -84,7 +100,8 @@
     var ann = (s.announcement || '').split('✦').map(function (x) { return '<span>✦ ' + esc(x.trim()) + '</span>'; }).join('');
     $('#announce').innerHTML = ann + ann;
     $('#searchCat').innerHTML = '<option value="">All categories</option>' + db.categories.map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join('');
-    $('#catsMenu').innerHTML = catListHTML();
+    // the categories menu opens as a wide glass panel: every category as a tile, then quick links and one main action
+    $('#catsMenu').innerHTML = catListHTML() + '<div class="mega-foot"><a href="#flash"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>Flash Sale</a><a href="#china-direct">How importing works</a><a href="#track">Track my order</a><a class="mega-cta" href="#shop">Shop all products</a></div>';
     $('#drawerLinks').innerHTML = catListHTML() + '<div class="catlist" style="border-top:1px solid var(--line);margin-top:6px;padding-top:6px">' +
       '<a href="#flash">⚡ Flash Sale</a>' + db.collections.map(function (c) { return '<a href="#col/' + c.id + '">' + esc(c.name) + '</a>'; }).join('') +
       '<a href="#track">Track My Order</a><a href="#china-direct">How Importing Works</a></div>';
@@ -93,11 +110,13 @@
       (s.whatsapp ? '<li><a target="_blank" rel="noopener" href="https://wa.me/' + esc(s.whatsapp) + '">WhatsApp us ↗</a></li>' : '');
     $('#year').textContent = new Date().getFullYear();
     $('#navLinks').innerHTML = (s.navLinks || []).map(function (l) { return '<a href="' + esc(l.link || '#') + '"' + (l.hot ? ' class="hot"' : '') + '>' + esc(l.label) + '</a>'; }).join('');
-    $('#payList').innerHTML = (s.paymentMethods || []).map(function (m) { return '<span>' + esc(m) + '</span>'; }).join('');
+    $('#payList').innerHTML = (s.paymentMethods || []).filter(function (m) { return m !== 'Bank Transfer' || bankReady(); }).map(function (m) { return '<span>' + esc(m) + '</span>'; }).join('');
     // position the fixed dropdown under its button
     var btn = $('#catsBtn'), menu = $('#catsMenu');
-    $('.cats-drop').addEventListener('mouseenter', function () { var b = btn.getBoundingClientRect(); menu.style.left = b.left + 'px'; menu.style.top = b.bottom + 'px'; });
-    btn.addEventListener('focus', function () { var b = btn.getBoundingClientRect(); menu.style.left = b.left + 'px'; menu.style.top = b.bottom + 'px'; });
+    // (kept inside the window: the panel is wide, so on a narrow screen it moves left rather than running off the edge)
+    var placeMenu = function () { var b = btn.getBoundingClientRect(); menu.style.left = Math.max(8, Math.min(b.left, innerWidth - menu.offsetWidth - 16)) + 'px'; menu.style.top = b.bottom + 'px'; };
+    $('.cats-drop').addEventListener('mouseenter', placeMenu);
+    btn.addEventListener('focus', placeMenu);
     updateCounts();
   }
   function updateCounts(bump) {
@@ -213,8 +232,14 @@
     setTitle('');
     var s = db.settings;
     var flash = flashOn() ? db.products.filter(function (p) { return p.flash; }) : [];
-    var promos = db.hero.slice(0, 2), banners = db.hero.slice(2);
-    var promoHTML = function (h, i) {
+    // poster banners (a finished picture with its own words) go to the full-width slider; the rest keep their places.
+    // Each keeps its index in db.hero for the visual editor.
+    var heroIx = db.hero.map(function (h, i) { return { h: h, i: i }; });
+    var posters = heroIx.filter(function (x) { return x.h.style === 'poster' && x.h.image; });
+    var cards = heroIx.filter(function (x) { return !(x.h.style === 'poster' && x.h.image); });
+    var promos = cards.slice(0, 2), banners = cards.slice(2);
+    var promoHTML = function (x) {
+      var h = x.h, i = x.i;
       return '<a class="promo" data-ed="banner" data-i="' + i + '" href="' + esc(h.link || '#shop') + '" style="--c:' + esc(h.color) + '"><small>' + esc(h.eyebrow) + '</small><b>' + esc(h.title) + '</b><span>' + esc(h.subtitle) + '</span><em>' + esc(h.cta || 'Shop now') + ' →</em>' +
         '<div class="art">' + (h.image ? '<img src="' + SCG.imgSrc(h.image) + '" alt="">' : SCG.productSVG(h.shape, '#ffffff', 'solid', h.color)) + '</div></a>';
     };
@@ -235,12 +260,14 @@
       },
       banners: function () {
         if (!banners.length) return '';
-        return '<section class="sec banners" style="--n:' + Math.min(3, banners.length) + '">' + banners.slice(0, 6).map(function (h, j) {
+        return '<section class="sec banners" style="--n:' + Math.min(3, banners.length) + '">' + banners.slice(0, 6).map(function (x) {
+          var h = x.h;
           var key = String(h.link || '').split('/')[1] || '';
           var items = db.products.filter(function (p) { return p.category === key || (p.collections || []).indexOf(key) > -1; }).slice(0, 2);
           if (!items.length) items = db.products.filter(function (p) { return p.shape === h.shape; }).slice(0, 2);
-          return '<a class="banner" data-ed="banner" data-i="' + (j + 2) + '" href="' + esc(h.link || '#shop') + '" style="--c:' + esc(h.color) + '"><b>' + esc(h.title) + '</b><span>' + esc(h.subtitle || '') + '</span>' +
-            '<div class="stack">' + (h.image ? '<div><img src="' + SCG.imgSrc(h.image) + '" alt="" style="border-radius:8px;height:100%;object-fit:cover"></div>' : items.map(function (p) { return '<div>' + visual(p) + '</div>'; }).join('')) + '</div></a>';
+          var drawn = !h.image && !items.length ? '<div>' + SCG.productSVG(h.shape || 'tshirt', '#ffffff', 'solid', h.color) + '</div>' : '';
+          return '<a class="banner" data-ed="banner" data-i="' + x.i + '" href="' + esc(h.link || '#shop') + '" style="--c:' + esc(h.color) + '"><b>' + esc(h.title) + '</b><span>' + esc(h.subtitle || '') + '</span>' +
+            '<div class="stack">' + (h.image ? '<div><img src="' + SCG.imgSrc(h.image) + '" alt="" style="border-radius:8px;width:100%;height:100%;object-fit:contain"></div>' : drawn || items.map(function (p) { return '<div>' + visual(p) + '</div>'; }).join('')) + '</div></a>';
         }).join('') + '</section>';
       },
       countries: function (sec) {
@@ -248,9 +275,9 @@
         return '<section class="sec" data-ed="origins"><div class="sec-head"><h2>' + esc(sec.title || 'Shop by Country') + '</h2><a class="more" href="#china-direct">How importing works</a></div><div class="countries">' +
           list.map(function (o) {
             var n = db.products.filter(function (p) { return p.origin === o.id; }).length;
-            return '<a class="country" href="#from/' + o.id + '">' + codeBadge(o.code) + '<b>' + esc(o.name) + '</b><small>' + n + ' products · ' + esc(o.days) + ' days</small></a>';
+            return '<a class="country" href="#from/' + o.id + '">' + codeBadge(o.code) + '<b>' + esc(o.name) + '</b><small>' + (n ? n + (n === 1 ? ' product · ' : ' products · ') : '') + esc(o.days) + ' days</small></a>';
           }).join('') +
-          '<a class="country local" href="#from/local">' + codeBadge('LK') + '<b>Colombo stock</b><small>' + db.products.filter(function (p) { return !p.origin || p.origin === 'local'; }).length + ' products · ' + esc(s.localDays) + ' days</small></a></div></section>';
+          '<a class="country local" href="#from/local">' + codeBadge('LK') + '<b>Colombo stock</b><small>' + (function (n) { return n ? n + (n === 1 ? ' product · ' : ' products · ') : ''; })(db.products.filter(function (p) { return !p.origin || p.origin === 'local'; }).length) + esc(s.localDays) + ' days</small></a></div></section>';
       },
       electronics: function (sec) { return rail(sec.title || 'Electronics', '#col/electronics', db.products.filter(function (p) { return (p.collections || []).indexOf('electronics') > -1; }).sort(function (a, b) { return b.sold - a.sold; }).slice(0, 12), 'data-ed="collection" data-id="electronics"'); },
       collections: function () {
@@ -259,8 +286,16 @@
           return list.length ? rail(c.name, '#col/' + c.id, list, 'data-ed="collection" data-id="' + c.id + '"') : '';
         }).join('');
       },
-      china: function (sec) { return rail(sec.title || 'China Direct', '#col/china-direct', db.products.filter(function (p) { return p.origin === 'china'; }).sort(function (a, b) { return SCG.discount(b) - SCG.discount(a); }).slice(0, 12)); },
-      best: function (sec) { return rail(sec.title || 'Best Sellers', '#col/best-sellers', db.products.slice().sort(function (a, b) { return b.sold - a.sold; }).slice(0, 12)); },
+      china: function (sec) {
+        return rail(sec.title || 'China Direct', SCG.collectionProducts('china-direct').length ? '#col/china-direct' : '#from/china',
+          db.products.filter(function (p) { return p.origin === 'china'; }).sort(function (a, b) { return SCG.discount(b) - SCG.discount(a); }).slice(0, 12));
+      },
+      best: function (sec) {
+        // the owner's own "Best Sellers" collection when it has products; otherwise what really sold (nothing sold yet = no row)
+        var picked = SCG.collectionProducts('best-sellers');
+        var list = picked.length ? picked : db.products.filter(function (p) { return p.sold > 0; }).sort(function (a, b) { return b.sold - a.sold; });
+        return rail(sec.title || 'Best Sellers', picked.length ? '#col/best-sellers' : '#shop', list.slice(0, 12));
+      },
       jfy: function (sec) {
         return '<div class="jfy-head"><h2>' + esc(sec.title || 'Just For You') + '</h2><div class="jfy-tabs" id="jfyTabs"><button class="on" data-t="all">All</button>' + db.categories.map(function (c) { return '<button data-t="' + c.id + '">' + esc(c.name) + '</button>'; }).join('') + '</div></div>' +
           '<div class="grid" id="jfy"></div><div class="loader" id="jfyMore"><span class="spinner"></span>Loading more products…</div>';
@@ -273,15 +308,72 @@
         '<aside class="panel hero-cats"><h3>Categories</h3>' + catListHTML() + '</aside>' +
         stageHTML('stage') +
         (promos.length ? '<div class="promos">' + promos.map(promoHTML).join('') + '</div>' : '') +
-      '</section>' + body + '</div>';
+      '</section>' + posterHTML(posters) + body + '</div>';
     mountGlobe('stage');
+    startPosters();
     tickCountdowns();
     if ($('#jfyTabs')) {
       $('#jfyTabs').onclick = function (e) { var b = e.target.closest('button'); if (!b) return; $$('#jfyTabs button').forEach(function (x) { x.classList.toggle('on', x === b); }); startJFY(b.dataset.t); };
       startJFY('all');
     }
   }
+  /* Poster slider: each picture is shown WHOLE at its own shape (object-fit: contain, never cropped or stretched).
+     The slider takes the shape of the current picture, so a 16:9 design and a long thin strip both fit exactly.
+     Swipe, arrows, dots and keyboard; changes every 6 s, pauses on hover/focus, off when the visitor prefers less motion. */
+  function posterHTML(list) {
+    if (!list.length) return '';
+    return '<section class="sec posters" id="posters" tabindex="-1" aria-roledescription="carousel" aria-label="Offers">' +
+      '<div class="pst-track" id="pstTrack">' + list.map(function (x, k) {
+        var h = x.h, alt = h.title || h.subtitle || 'Offer';
+        return '<a class="pst" data-ed="banner" data-i="' + x.i + '" href="' + esc(h.link || '#shop') + '" role="group" aria-roledescription="slide" aria-label="' + (k + 1) + ' of ' + list.length + '">' +
+          '<img src="' + SCG.imgSrc(h.image) + '" alt="' + esc(alt) + '"' + (k ? ' loading="lazy"' : ' fetchpriority="high"') + ' decoding="async"></a>';
+      }).join('') + '</div>' +
+      (list.length > 1 ? '<button class="pst-nav prev" type="button" aria-label="Previous offer">‹</button><button class="pst-nav next" type="button" aria-label="Next offer">›</button>' +
+        '<div class="pst-dots">' + list.map(function (x, k) { return '<button type="button" aria-label="Show offer ' + (k + 1) + '"' + (k ? '' : ' aria-current="true"') + '></button>'; }).join('') + '</div>' : '') +
+      '</section>';
+  }
+  var pst = { timer: null };
+  function startPosters() {
+    clearInterval(pst.timer);
+    var box = $('#posters'); if (!box) return;
+    var track = $('#pstTrack'), slides = $$('.pst', track), dots = $$('.pst-dots button', box), cur = 0, paused = false;
+    function ratio(img) { return img && img.naturalWidth && img.naturalHeight ? img.naturalWidth / img.naturalHeight : 16 / 9; }
+    function fit() { box.style.setProperty('--ar', String(ratio($('img', slides[cur])))); }
+    function mark() { dots.forEach(function (d, k) { if (k === cur) d.setAttribute('aria-current', 'true'); else d.removeAttribute('aria-current'); }); }
+    function go(n, smooth) {
+      cur = (n + slides.length) % slides.length;
+      fit();
+      track.scrollTo({ left: cur * track.clientWidth, behavior: smooth === false ? 'auto' : 'smooth' });
+      mark();
+    }
+    slides.forEach(function (s) { var img = $('img', s); if (!img.complete) img.addEventListener('load', function () { if (s === slides[cur]) fit(); }); });
+    fit();
+    if (slides.length < 2) return;
+    $('.pst-nav.prev', box).onclick = function () { go(cur - 1); };
+    $('.pst-nav.next', box).onclick = function () { go(cur + 1); };
+    dots.forEach(function (d, k) { d.onclick = function () { go(k); }; });
+    var st;
+    track.addEventListener('scroll', function () {   // swipe on phones: follow the slide the visitor stopped on
+      clearTimeout(st); st = setTimeout(function () {
+        var k = Math.round(track.scrollLeft / Math.max(1, track.clientWidth));
+        if (k !== cur && slides[k]) { cur = k; mark(); fit(); }
+      }, 120);
+    }, { passive: true });
+    box.addEventListener('mouseenter', function () { paused = true; });
+    box.addEventListener('mouseleave', function () { paused = false; });
+    box.addEventListener('focusin', function () { paused = true; });
+    box.addEventListener('focusout', function () { paused = false; });
+    box.addEventListener('keydown', function (e) { if (e.key === 'ArrowLeft') go(cur - 1); if (e.key === 'ArrowRight') go(cur + 1); });
+    var onResize = function () { if (!document.body.contains(box)) { window.removeEventListener('resize', onResize); return; } go(cur, false); };
+    window.addEventListener('resize', onResize);
+    if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    pst.timer = setInterval(function () {
+      if (!document.body.contains(box)) { clearInterval(pst.timer); return; }
+      if (!paused && !document.hidden) go(cur + 1);
+    }, 6000);
+  }
   function rail(title, link, list, ed) {
+    if (!list.length) return '';
     return '<section class="sec"' + (ed ? ' ' + ed : '') + '><div class="sec-head"><h2>' + esc(title) + '</h2><a class="more" href="' + link + '">Shop more</a></div><div class="panel"><div class="rail">' + list.map(function (p) { return card(p); }).join('') + '</div></div></section>';
   }
   function startJFY(tab) {
@@ -299,32 +391,32 @@
     moreJFY();
     var more = $('#jfyMore');
     if ('IntersectionObserver' in window) { jfy.io = new IntersectionObserver(function (en) { if (en[0].isIntersecting) moreJFY(); }, { rootMargin: '400px' }); jfy.io.observe(more); }
-    else more.innerHTML = '<button class="btn line" onclick="return false">Load more</button>';
+    else { more.innerHTML = '<button class="btn line">Load more</button>'; more.firstChild.onclick = function () { moreJFY(); }; }   // very old browsers
   }
   function moreJFY() {
     var grid = $('#jfy'); if (!grid) return;
     var next = jfy.list.slice(jfy.shown, jfy.shown + 24); jfy.shown += next.length;
     grid.insertAdjacentHTML('beforeend', next.map(function (p) { return card(p, { add: true }); }).join(''));
-    if (jfy.shown >= jfy.list.length) { $('#jfyMore').innerHTML = 'You’ve seen all ' + jfy.list.length + ' products. <a href="#shop" style="color:var(--red);margin-left:6px;font-weight:700">Browse with filters →</a>'; if (jfy.io) jfy.io.disconnect(); }
+    if (jfy.shown >= jfy.list.length) { $('#jfyMore').innerHTML = 'You’ve seen all ' + jfy.list.length + (jfy.list.length === 1 ? ' product. ' : ' products. ') + '<a href="#shop" style="color:var(--red);margin-left:6px;font-weight:700">Browse with filters →</a>'; if (jfy.io) jfy.io.disconnect(); }
   }
 
   /* ---------------- LISTING ---------------- */
   function renderListing(kind, val, extra) {
-    var title = 'All Products', sub = 'Everything we sell, in one place.', color = '#0b2a6f', art = 'tshirt', artImg = '', cover = '';
+    var title = 'All Products', sub = 'Everything we sell, in one place.', color = '#0b2a6f', art = 'tshirt', artImg = '';
     var st = { cats: [], min: '', max: '', rating: 0, origins: [], sale: false, sort: 'pop', q: '', coll: '', limit: 30 };
     if (kind === 'c') { var c = SCG.categoryById(val); if (c) { title = c.name; sub = c.tagline; color = c.icon || color; art = c.shape; artImg = c.image || ''; st.cats = [c.id]; } }
-    if (kind === 'col') { var co = SCG.collectionById(val); if (co) { title = co.name; sub = co.description; color = co.accent; art = 'bag'; cover = co.image || ''; st.coll = co.id; st.sort = 'rec'; } }
-    if (kind === 'flash') { title = db.settings.flashTitle || 'Flash Sale'; sub = flashOn() ? 'Huge discounts for a limited time.' : 'This flash sale has ended. Check back soon for new deals.'; color = '#d7141a'; art = 'sneaker'; st.sale = true; st.flashOnly = true; st.sort = 'off'; }
+    if (kind === 'col') { var co = SCG.collectionById(val); if (co) { title = co.name; sub = co.description; color = co.accent; art = 'bag'; artImg = co.image || ''; st.coll = co.id; st.sort = 'rec'; } }
+    if (kind === 'flash') { title = db.settings.flashTitle || 'Flash Sale'; sub = flashOn() ? 'Huge discounts for a limited time.' : 'This flash sale has ended. Check back soon for new deals.'; color = '#d7141a'; art = 'sneaker'; st.flashOnly = true; st.sort = 'off'; }   // same products as the homepage Flash Sale row (a flash item needs no old price)
     if (kind === 'from') { var oi = val === 'local' ? { name: 'Colombo stock', days: db.settings.localDays, local: true } : SCG.originById(val); if (oi) { title = oi.local ? 'Ships from Colombo' : 'Imported from ' + oi.name; sub = 'Delivered to your door in ' + oi.days + ' days.'; color = '#0f766e'; art = 'bag'; st.origins = [val]; } }
     if (kind === 'search') { st.q = val; title = 'Results for “' + val + '”'; sub = ''; if (extra) st.cats = [extra]; }
     setTitle(kind === 'search' ? 'Search' : title);
 
     app.innerHTML = '<div class="wrap"><div class="crumbs"><a href="#">Home</a>›<span>' + esc(title) + '</span></div>' +
-      (kind !== 'search' ? '<div class="cat-hero reveal" ' + ({ c: 'data-ed="category" data-id="' + esc(val) + '"', col: 'data-ed="collection" data-id="' + esc(val) + '"', flash: 'data-ed="flash"', from: 'data-ed="origins"', shop: '' }[kind] || '') + ' style="--c:' + color + (cover ? ';--cover:url(' + SCG.imgSrc(String(cover).replace(/[()'"\\\s]/g, encodeURIComponent)) + ')' : '') + '"' + (cover ? ' data-cover' : '') + '><h1>' + esc(title) + '</h1><p>' + esc(sub) + '</p>' + (kind === 'flash' && flashOn() ? '<p style="margin-top:8px">' + cdHTML() + '</p>' : '') + (cover ? '' : '<div class="art' + (artImg ? ' photo' : '') + '">' + (artImg ? '<img src="' + SCG.imgSrc(artImg) + '" alt="">' : SCG.productSVG(art, '#ffffff', 'solid', color)) + '</div>') + '</div>' : '') +
+      (kind !== 'search' ? '<div class="cat-hero reveal" ' + ({ c: 'data-ed="category" data-id="' + esc(val) + '"', col: 'data-ed="collection" data-id="' + esc(val) + '"', flash: 'data-ed="flash"', from: 'data-ed="origins"', shop: '' }[kind] || '') + ' style="--c:' + color + '"><h1>' + esc(title) + '</h1><p>' + esc(sub) + '</p>' + (kind === 'flash' && flashOn() ? '<p style="margin-top:8px">' + cdHTML() + '</p>' : '') + '<div class="art' + (artImg ? ' photo' : '') + '">' + (artImg ? '<img src="' + SCG.imgSrc(artImg) + '" alt="">' : SCG.productSVG(art, '#ffffff', 'solid', color)) + '</div></div>' : '') +
       '<div class="listing"><aside class="panel filters" id="filters">' +
         '<div class="grp"><h4>Category</h4>' + db.categories.map(function (c) { return '<label><input type="checkbox" name="fc" value="' + c.id + '"' + (st.cats.indexOf(c.id) > -1 ? ' checked' : '') + '>' + esc(c.name) + '</label>'; }).join('') + '</div>' +
         '<div class="grp"><h4>Price (Rs.)</h4><div class="price-row"><input id="fmin" type="number" min="0" placeholder="Min" aria-label="Minimum price"><span aria-hidden="true">–</span><input id="fmax" type="number" min="0" placeholder="Max" aria-label="Maximum price"></div></div>' +
-        '<div class="grp"><h4>Rating</h4>' + [0, 4.5, 4, 3.5].map(function (r) { return '<label><input type="radio" name="fr" value="' + r + '"' + (r === 0 ? ' checked' : '') + '>' + (r ? stars(r) + ' ' + r + ' &amp; up' : 'Any rating') + '</label>'; }).join('') + '</div>' +
+        (db.products.some(function (p) { return p.reviews > 0; }) ? '<div class="grp"><h4>Rating</h4>' + [0, 4.5, 4, 3.5].map(function (r) { return '<label><input type="radio" name="fr" value="' + r + '"' + (r === 0 ? ' checked' : '') + '>' + (r ? stars(r) + ' ' + r + ' &amp; up' : 'Any rating') + '</label>'; }).join('') + '</div>' : '') +
         '<div class="grp"><h4>Shipped from</h4>' + activeOrigins().map(function (o) { return '<label><input type="checkbox" name="fo" value="' + o.id + '"' + (st.origins.indexOf(o.id) > -1 ? ' checked' : '') + '>' + esc(o.name) + ' (' + esc(o.days) + ' days)</label>'; }).join('') + '<label><input type="checkbox" name="fo" value="local"' + (st.origins.indexOf('local') > -1 ? ' checked' : '') + '>Colombo stock (' + esc(db.settings.localDays) + ' days)</label></div>' +
         '<div class="grp"><h4>Offers</h4><label><input type="checkbox" id="fsale"' + (st.sale ? ' checked' : '') + '>On discount only</label></div>' +
         '<button class="btn full filter-btn" id="fDone">Show results</button>' +
@@ -352,7 +444,7 @@
       var recOrder = st.coll ? SCG.collectionProducts(st.coll).map(function (x) { return x.id; }) : [];
       var srt = { rec: function (a, b) { return recOrder.indexOf(a.id) - recOrder.indexOf(b.id); }, pop: function (a, b) { return b.sold - a.sold; }, new: sortNewest, low: function (a, b) { return a.price - b.price; }, high: function (a, b) { return b.price - a.price; }, off: function (a, b) { return SCG.discount(b) - SCG.discount(a); }, rating: function (a, b) { return b.rating - a.rating; } }[st.sort];
       list.sort(srt);
-      $('#count').textContent = list.length + ' items found';
+      $('#count').textContent = list.length + (list.length === 1 ? ' item found' : ' items found');
       $('#lgrid').innerHTML = list.length ? list.slice(0, st.limit).map(function (p) { return card(p, { flash: kind === 'flash', add: true }); }).join('') : '<div class="empty"><h3>No products match</h3>Try removing a filter or searching for something else.</div>';
       $('#lmore').innerHTML = list.length > st.limit ? '<button class="btn line" id="lmoreBtn">Load more (' + (list.length - st.limit) + ' left)</button>' : '';
       if ($('#lmoreBtn')) $('#lmoreBtn').onclick = function () { st.limit += 30; draw(); };
@@ -378,12 +470,84 @@
     var out = [p.color]; for (var i = 0; out.length < 4 && i < pal.length; i++) { var c = pal[(i + p.name.length) % pal.length]; if (out.indexOf(c) < 0) out.push(c); }
     return out;
   }
+  // ---------- product reviews (API mode): written by buyers of a delivered order ----------
+  function revDate(t) { try { return new Date(t).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }); } catch (e) { return ''; } }
+  function revItem(v) {
+    return '<div class="rev"><div class="rev-top">' + avatar({ name: v.name, avatarUrl: v.avatarUrl }) + '<div class="rev-who"><div><b>' + esc(v.name) + '</b><span class="rev-ok">✓ Verified purchase</span></div>' + stars(v.rating) + '</div></div>' +
+      '<small class="rev-meta">' + revDate(v.at) + (v.variant ? ' · ' + esc(v.variant) : '') + (v.edited ? ' · edited' : '') + '</small>' +
+      (v.comment ? '<p class="rev-text">' + esc(v.comment) + '</p>' : '') +
+      (v.reply ? '<div class="rev-reply"><b>Response from Source Connect</b><p>' + esc(v.reply) + '</p></div>' : '') + '</div>';
+  }
+  function reviewsUI(p) {
+    var st = { stars: null, list: [] };
+    function load(more) {
+      var box = $('#revBox'); if (!box) return;
+      if (!more) st.list = [];
+      SCG.api('GET', '/reviews/' + encodeURIComponent(p.id) + '?offset=' + st.list.length + (st.stars ? '&stars=' + st.stars : '')).then(function (d) {
+        box = $('#revBox'); if (!box) return;
+        if (!d) { box.innerHTML = '<p style="margin:0;color:var(--muted)">Reviews are not available for this product.</p>'; return; }
+        st.list = st.list.concat(d.reviews || []);
+        var hj = $('.rev-jump'); if (hj && !st.stars) hj.innerHTML = d.count ? stars(d.average) + '<span>' + d.average + ' · ' + d.count + (d.count === 1 ? ' rating' : ' ratings') + '</span>' : stars(0) + '<span>No ratings yet</span>';
+        if (!d.count) { box.innerHTML = '<p style="margin:0;color:var(--muted)">No reviews yet. Customers who received this product can rate it from their order (My account → My orders).</p>'; return; }
+        var bars = [5, 4, 3, 2, 1].map(function (n) { var c = d.stars[String(n)] || 0;
+          return '<button type="button" data-fs="' + n + '" class="' + (st.stars === n ? 'on' : '') + '" aria-label="Show ' + n + '-star reviews"><span>' + n + '★</span><i><em style="width:' + (c / d.count * 100) + '%"></em></i><span>' + c + '</span></button>'; }).join('');
+        box.innerHTML = '<div class="rating-sum"><div><div class="big">' + d.average + '<small style="font-size:18px;color:var(--muted)">/5</small></div>' + stars(d.average) +
+            '<div style="color:var(--muted);font-size:12px">' + d.count + (d.count === 1 ? ' rating' : ' ratings') + '</div></div><div class="rbars">' + bars + '</div></div>' +
+          '<div class="rev-filter">' + (st.stars ? '<span>Showing ' + st.stars + '-star reviews (' + d.matching + ')</span> <button type="button" class="link-sm" data-fs="0">Show all</button>' : '<span>Newest first</span>') + '</div>' +
+          (st.list.length ? st.list.map(revItem).join('') : '<p class="muted">No reviews with this rating.</p>') +
+          (st.list.length < d.matching ? '<button type="button" class="btn line" id="revMore" style="margin-top:12px">Show more reviews</button>' : '');
+        box.onclick = function (e) {
+          var f = e.target.closest('[data-fs]'); if (f) { var n = +f.dataset.fs; st.stars = n && n !== st.stars ? n : null; load(false); return; }
+          if (e.target.closest('#revMore')) load(true);
+        };
+      }, function (err) { var b = $('#revBox'); if (b) b.innerHTML = '<p style="margin:0;color:var(--muted)">' + esc(err.message) + '</p>'; });
+    }
+    load(false);
+  }
+  // order page: the buyer rates each item after delivery
+  function orderReviewsUI(number, token, el) {
+    SCG.api('POST', '/orders/reviews', { number: number, token: token || null }).then(function (d) {
+      var box = el || $('#ordRev'); if (!box || !document.body.contains(box)) return;
+      if (!d || !d.canReview || !d.items.length) { if (el) box.innerHTML = '<p class="muted" style="margin:8px 0">Nothing to review in this order.</p>'; return; }
+      box.innerHTML = '<h3 style="margin:18px 0 4px">Rate your items</h3><p class="muted" style="margin:0 0 10px;font-size:13px">Your rating helps other customers. Other people see your first name and the first letter of your last name.</p>' +
+        d.items.map(function (it, i) {
+          var v = it.review;
+          return '<form class="rev-form" data-i="' + i + '" data-r="' + (v ? v.rating : 0) + '"><div class="rev-form-head"><a href="#p/' + esc(it.id) + '"><b>' + esc(it.name) + '</b></a>' + (it.variant ? ' <small class="muted">' + esc(it.variant) + '</small>' : '') + '</div>' +
+            (v && v.status === 'hidden' ? '<p class="muted" style="margin:4px 0;font-size:12px">The shop has hidden this review from the product page.</p>' : '') +
+            '<div class="star-pick" role="radiogroup" aria-label="Your rating for ' + esc(it.name) + '">' + [1, 2, 3, 4, 5].map(function (n) {
+              return '<button type="button" role="radio" data-n="' + n + '" aria-checked="' + (v && v.rating === n) + '" aria-label="' + n + (n === 1 ? ' star' : ' stars') + '"' + (v && n <= v.rating ? ' class="on"' : '') + '>' + I.star + '</button>'; }).join('') + '</div>' +
+            '<textarea name="comment" maxlength="1000" rows="3" placeholder="What did you like or not like? (optional)">' + esc(v ? v.comment : '') + '</textarea>' +
+            (v && v.reply ? '<div class="rev-reply"><b>Response from Source Connect</b><p>' + esc(v.reply) + '</p></div>' : '') +
+            '<button class="btn navy sm">' + (v ? 'Update review' : 'Submit review') + '</button></form>';
+        }).join('');
+      box.onclick = function (e) {
+        var b = e.target.closest('.star-pick button'); if (!b) return;
+        var f = b.closest('form'), n = +b.dataset.n; f.dataset.r = n;
+        $$('.star-pick button', f).forEach(function (x) { x.classList.toggle('on', +x.dataset.n <= n); x.setAttribute('aria-checked', String(+x.dataset.n === n)); });
+      };
+      $$('.rev-form', box).forEach(function (f) {
+        f.onsubmit = function (e) {
+          e.preventDefault(); var it = d.items[+f.dataset.i], n = +f.dataset.r;
+          if (!n) { toast('Choose 1 to 5 stars'); return; }
+          var btn = f.querySelector('button.btn'); btn.disabled = true;
+          SCG.api('POST', '/orders/reviews/save', { number: number, token: token || null, product: it.id, rating: n, comment: f.elements.comment.value.trim() })
+            .then(function () { toast('Thank you for your review!'); orderReviewsUI(number, token, el); }, function (err) { btn.disabled = false; toast(err.message); });
+        };
+      });
+      if (revJump) { revJump = false; box.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+    }, function () {});
+  }
+  var revJump = false;
+
   function renderPDP(id) {
     var p = SCG.productById(id);
     if (!p) { app.innerHTML = '<div class="wrap"><div class="panel empty" style="margin-top:16px"><h3>Product not found</h3><a class="btn" href="#">Back to home</a></div></div>'; return; }
     setTitle(p.name);
     var cat = SCG.categoryById(p.category), off = SCG.discount(p), vars = variants(p), imgs = SCG.productImages(p), oi = SCG.originInfo(p);
-    var st = { color: vars[0], size: (p.sizes || [])[Math.min(1, (p.sizes || []).length - 1)] || '', qty: 1 };
+    // start on a size that can be bought (the usual second size when it is in stock, else the first size in stock)
+    var sizes = p.sizes || [], defSize = sizes[Math.min(1, sizes.length - 1)] || '';
+    var buyable = sizes.filter(function (z) { return stockFor(p, z) > 0; });
+    var st = { color: vars[0], size: !sizes.length || stockFor(p, defSize) > 0 ? defSize : (buyable[0] || defSize), qty: 1 };
     var related = db.products.filter(function (x) { return x.category === p.category && x.id !== p.id; }).slice(0, 12);
     var dist = [.62, .22, .09, .04, .03].map(function (k, i) { return Math.round(p.reviews * (p.rating >= 4.5 ? k : [.4, .3, .17, .08, .05][i])); });
     var s = db.settings;
@@ -393,15 +557,16 @@
         '<div class="gallery"><div class="big" id="big" style="--c:' + p.color + '">' + visual(p) + '</div>' +
           '<div class="thumbs" id="thumbs">' + (imgs.length > 1 ? imgs.map(function (src, i) { return '<button class="' + (i ? '' : 'on') + '" data-img="' + i + '" aria-label="Photo ' + (i + 1) + '"><img src="' + SCG.imgSrc(src) + '" alt=""></button>'; }).join('') : imgs.length ? '' : vars.map(function (c, i) { return '<button class="' + (i ? '' : 'on') + '" data-c="' + c + '" aria-label="Colour ' + (i + 1) + '">' + visual(p, c) + '</button>'; }).join('')) + '</div></div>' +
         '<div><h1>' + esc(p.name) + '</h1>' +
-          '<div class="sub">' + (p.reviews ? stars(p.rating) + '<span>' + p.rating + ' · ' + p.reviews + ' ratings</span>' : '<span>No ratings yet</span>') + (p.sold ? '<span>' + fmtCount(p.sold) + ' sold</span>' : '') + (p.brand ? '<span>Brand: <a href="#search/' + encodeURIComponent(p.brand) + '">' + esc(p.brand) + '</a></span>' : '') + '</div>' +
+          '<div class="sub">' + (SCG.API ? '<a href="#" class="rev-jump">' : '') + (p.reviews ? stars(p.rating) + '<span>' + p.rating + ' · ' + p.reviews + (p.reviews === 1 ? ' rating' : ' ratings') + '</span>' : stars(0) + '<span>No ratings yet</span>') + (SCG.API ? '</a>' : '') + (p.sold ? '<span>' + fmtCount(p.sold) + ' sold</span>' : '') + (p.brand ? '<span>Brand: <a href="#search/' + encodeURIComponent(p.brand) + '">' + esc(p.brand) + '</a></span>' : '') + '</div>' +
           (isFlash(p) ? '<div class="flash-strip"><span>⚡ ' + esc(db.settings.flashTitle || 'Flash Sale') + '</span>' + cdHTML() + '</div>' : '') +
           '<div class="price-box"><div class="now">' + money(p.price) + '</div>' + (p.comparePrice ? '<div class="old"><s>' + money(p.comparePrice) + '</s><b>-' + off + '%</b></div>' : '') + '</div>' +
           (vars.length > 1 ? '<div class="opt"><span>Colour</span><div class="swatches" id="sw">' + vars.map(function (c, i) { return '<button class="' + (i ? '' : 'on') + '" data-c="' + c + '" aria-label="Colour ' + (i + 1) + '">' + visual(p, c) + '</button>'; }).join('') + '</div></div>' : '') +
-          ((p.sizes || []).length ? '<div class="opt"><span>Size</span><div class="sizes" id="sz">' + p.sizes.map(function (z) { return '<button class="' + (z === st.size ? 'on' : '') + '" data-s="' + esc(z) + '">' + esc(z) + '</button>'; }).join('') + '</div></div>' : '') +
-          '<div class="opt"><span>Quantity</span><div><div class="qty"><button data-q="-1" aria-label="Less">−</button><span id="qv">1</span><button data-q="1" aria-label="More">+</button></div> <small style="color:' + (p.stock > 0 ? 'var(--muted)' : 'var(--red)') + ';margin-left:8px">' + (p.stock > 0 ? p.stock + ' available' : 'Out of stock') + '</small></div></div>' +
-          '<div class="buy-row"><button class="btn navy" id="buyNow"' + (p.stock > 0 ? '' : ' disabled') + '>' + (p.stock > 0 ? 'Buy Now' : 'Out of stock') + '</button><button class="btn" id="addCart"' + (p.stock > 0 ? '' : ' disabled') + '>Add to Cart</button><button class="btn line heart-btn" data-wish="' + p.id + '" aria-label="Wishlist" style="flex:0 0 auto;padding:14px">' + I.heart + '</button></div>' +
+          ((p.sizes || []).length ? '<div class="opt"><span>Size</span><div class="sizes" id="sz">' + p.sizes.map(function (z) { var left = stockFor(p, z); return '<button class="' + (z === st.size ? 'on' : '') + (left > 0 ? '' : ' out') + '" data-s="' + esc(z) + '"' + (left > 0 ? '' : ' disabled title="Out of stock" aria-label="' + esc(z) + ', out of stock"') + '>' + esc(z) + '</button>'; }).join('') + '</div></div>' : '') +
+          '<div class="opt"><span>Quantity</span><div><div class="qty"><button data-q="-1" aria-label="Less">−</button><span id="qv">1</span><button data-q="1" aria-label="More">+</button></div> <small id="avail" style="margin-left:8px"></small></div></div>' +
+          '<div class="buy-row"><button class="btn navy" id="buyNow">Buy Now</button><button class="btn" id="addCart">Add to Cart</button><button class="btn line heart-btn" data-wish="' + p.id + '" aria-label="Wishlist" style="flex:0 0 auto;padding:14px">' + I.heart + '</button></div>' +
         '</div></div>' +
-        '<div class="panel tabs-box"><nav id="ptabs"><button class="on" data-t="d">Description</button><button data-t="s">Specifications</button><button data-t="r">Ratings</button></nav><div class="body" id="pbody"></div></div>' +
+        '<div class="panel tabs-box"><nav id="ptabs"><button class="on" data-t="d">Description</button><button data-t="s">Specifications</button>' + (SCG.API ? '' : '<button data-t="r">Ratings</button>') + '</nav><div class="body" id="pbody"></div></div>' +
+        (SCG.API ? '<div class="panel rev-panel" id="revPanel"><h2>Ratings &amp; Reviews</h2><div id="revBox"><p style="margin:0;color:var(--muted)">Loading reviews…</p></div></div>' : '') +
       '</div>' +
       '<aside><div class="panel side-box"><h4>Delivery</h4>' +
         '<div class="side-row">' + I.pin + '<div><b>' + esc(s.address || 'Sri Lanka') + '</b><small>Islandwide delivery</small></div></div>' +
@@ -420,18 +585,32 @@
 
     function tab(t) {
       $$('#ptabs button').forEach(function (b) { b.classList.toggle('on', b.dataset.t === t); });
-      $('#pbody').innerHTML = t === 'd' ? '<p style="margin-top:0">' + esc(p.description) + '</p><ul style="color:var(--muted)"><li>Brand: ' + esc(p.brand) + '</li><li>' + (oi.local ? 'Ships from Colombo (' + esc(oi.days) + ' days)' : 'Imported from ' + esc(oi.name) + ' (' + esc(oi.days) + ' days)') + '</li>' + (s.payCOD ? '<li>Cash on Delivery available islandwide</li>' : '') + '</ul>'
+      $('#pbody').innerHTML = t === 'd' ? '<p style="margin-top:0;white-space:pre-line">' + esc(p.description) + '</p><ul style="color:var(--muted)"><li>Brand: ' + esc(p.brand) + '</li><li>' + (oi.local ? 'Ships from Colombo (' + esc(oi.days) + ' days)' : 'Imported from ' + esc(oi.name) + ' (' + esc(oi.days) + ' days)') + '</li>' + (s.payCOD ? '<li>Cash on Delivery available islandwide</li>' : '') + '</ul>'
         : t === 's' ? '<table class="spec"><tr><td>Brand</td><td>' + esc(p.brand) + '</td></tr><tr><td>Category</td><td>' + esc(cat ? cat.name : '') + '</td></tr><tr><td>SKU</td><td>' + esc(p.id.toUpperCase()) + '</td></tr>' + ((p.sizes || []).length ? '<tr><td>Sizes</td><td>' + esc(p.sizes.join(', ')) + '</td></tr>' : '') + '<tr><td>Ships from</td><td>' + (oi.local ? 'Colombo stock' : esc(oi.name)) + '</td></tr><tr><td>In stock</td><td>' + p.stock + '</td></tr></table>'
           : !p.reviews ? '<p style="margin:0;color:var(--muted)">No ratings yet. Ratings appear here after customers review this product.</p>' : '<div class="rating-sum"><div><div class="big">' + p.rating + '<small style="font-size:18px;color:var(--muted)">/5</small></div>' + stars(p.rating) + '<div style="color:var(--muted);font-size:12px">' + p.reviews + ' ratings</div></div><div class="rbars">' + dist.map(function (n, i) { return '<div><span>' + (5 - i) + '★</span><i><em style="width:' + (p.reviews ? n / p.reviews * 100 : 0) + '%"></em></i><span>' + n + '</span></div>'; }).join('') + '</div></div>';
     }
     tab('d');
     $('#ptabs').onclick = function (e) { var b = e.target.closest('button'); if (b) tab(b.dataset.t); };
-    $('#thumbs').addEventListener('click', function (e) { var b = e.target.closest('[data-img]'); if (!b) return; $('#big').innerHTML = '<img src="' + SCG.imgSrc(imgs[+b.dataset.img]) + '" alt="' + esc(p.name) + '">'; $$('#thumbs button').forEach(function (x) { x.classList.toggle('on', x === b); }); });
+    if (SCG.API) {
+      reviewsUI(p);
+      var rj = $('.rev-jump'); if (rj) rj.onclick = function (e) { e.preventDefault(); var rp = $('#revPanel'); if (rp) rp.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+    }
+    $('#thumbs').addEventListener('click', function (e) { var b = e.target.closest('[data-img]'); if (!b) return; $('#big').innerHTML = '<img src="' + SCG.imgSrc(imgs[+b.dataset.img]) + '" alt="' + esc(p.name) + '" data-pid="' + esc(p.id) + '">'; $$('#thumbs button').forEach(function (x) { x.classList.toggle('on', x === b); }); });
     function pick(c) { st.color = c; $('#big').innerHTML = visual(p, c); ['#thumbs', '#sw'].forEach(function (s) { if ($(s)) $$('button', $(s)).forEach(function (b) { b.classList.toggle('on', b.dataset.c === c); }); }); }
     // colour buttons only (photo thumbnails have their own handler above)
     ['#thumbs', '#sw'].forEach(function (s) { if ($(s)) $(s).onclick = function (e) { var b = e.target.closest('button[data-c]'); if (b) pick(b.dataset.c); }; });
-    if ($('#sz')) $('#sz').onclick = function (e) { var b = e.target.closest('button'); if (!b) return; st.size = b.dataset.s; $$('#sz button').forEach(function (x) { x.classList.toggle('on', x === b); }); };
-    $$('[data-q]').forEach(function (b) { b.onclick = function () { st.qty = Math.max(1, Math.min(Math.max(1, p.stock), st.qty + +b.dataset.q)); $('#qv').textContent = st.qty; }; });
+    // what can be bought in the chosen size: the "N available" note, the quantity limit and the buy buttons all follow it
+    function avail() {
+      var left = stockFor(p, st.size), a = $('#avail');
+      st.qty = Math.max(1, Math.min(st.qty, Math.max(1, left))); $('#qv').textContent = st.qty;
+      a.textContent = left > 0 ? left + ' available' + ((p.variants || []).length && sizes.length > 1 ? ' in size ' + st.size : '') : 'Out of stock';
+      a.style.color = left > 0 ? 'var(--muted)' : 'var(--red)';
+      $('#buyNow').disabled = $('#addCart').disabled = left <= 0;
+      $('#buyNow').textContent = left > 0 ? 'Buy Now' : 'Out of stock';
+    }
+    if ($('#sz')) $('#sz').onclick = function (e) { var b = e.target.closest('button'); if (!b || b.disabled) return; st.size = b.dataset.s; $$('#sz button').forEach(function (x) { x.classList.toggle('on', x === b); }); avail(); };
+    $$('[data-q]').forEach(function (b) { b.onclick = function () { st.qty = Math.max(1, Math.min(Math.max(1, stockFor(p, st.size)), st.qty + +b.dataset.q)); $('#qv').textContent = st.qty; }; });
+    avail();
     var big = $('#big');
     big.addEventListener('mousemove', function (e) { var r = big.getBoundingClientRect(), el = big.firstElementChild; el.style.transformOrigin = ((e.clientX - r.left) / r.width * 100) + '% ' + ((e.clientY - r.top) / r.height * 100) + '%'; el.style.transform = 'scale(1.8)'; });
     big.addEventListener('mouseleave', function () { big.firstElementChild.style.transform = ''; });
@@ -447,10 +626,17 @@
   /** Adds to the cart without ever going over the stock. Returns how many were added. */
   function addToCart(id, size, qty, color) {
     var p = SCG.productById(id); if (!p) return 0;
-    if (size === undefined || size === null) size = (p.sizes || [])[Math.min(1, (p.sizes || []).length - 1)] || '';
+    var vars = p.variants || [];   // per-size stock from the server (API mode)
+    if (size === undefined || size === null) {
+      var inStock = vars.filter(function (v) { return v.stock > 0 && v.size; });
+      size = inStock.length ? inStock[Math.min(1, inStock.length - 1)].size : ((p.sizes || [])[Math.min(1, (p.sizes || []).length - 1)] || '');
+    }
     color = color || p.color; qty = Math.max(1, qty || 1);
-    var cart = SCG.getCart(), left = Math.max(0, (p.stock || 0) - inCart(id, cart));
-    if (!left) { toast(p.stock > 0 ? 'You already have all ' + p.stock + ' in stock in your cart' : 'Sorry, ' + p.name + ' is out of stock'); return 0; }
+    var vs = vars.filter(function (v) { return v.size === (size || ''); })[0];
+    var cap = vs ? vs.stock : (p.stock || 0);
+    var cart = SCG.getCart(), have = cart.reduce(function (n, l) { return n + (l.id === id && (!vs || (l.size || '') === (size || '')) ? l.qty : 0); }, 0);
+    var left = Math.max(0, cap - have);
+    if (!left) { toast(cap > 0 ? 'You already have all ' + cap + ' in stock in your cart' : 'Sorry, ' + p.name + (vs && size ? ' (size ' + size + ')' : '') + ' is out of stock'); return 0; }
     var add = Math.min(qty, left);
     var line = cart.filter(function (l) { return l.id === id && l.size === size && l.color === color; })[0];
     if (line) line.qty += add; else cart.push({ id: id, size: size, color: color, qty: add, sel: true });
@@ -474,18 +660,18 @@
     app.innerHTML = '<div class="wrap"><div class="crumbs"><a href="#">Home</a>›<span>Cart</span></div><div class="cart-wrap"><div class="panel">' +
       '<div class="cart-row" style="grid-template-columns:24px 1fr auto;padding:12px 14px"><input type="checkbox" id="selAll"' + (lines.every(function (x) { return x.l.sel !== false; }) ? ' checked' : '') + ' aria-label="Select all"><b>Select all (' + lines.length + ')</b><button class="rm" id="delSel" aria-label="Delete selected items">' + I.trash + '</button></div>' +
       lines.map(function (x) {
-        return '<div class="cart-row"><input type="checkbox" data-sel="' + x.i + '"' + (x.l.sel !== false ? ' checked' : '') + ' aria-label="Select"><a class="th" href="#p/' + x.p.id + '" style="background:' + SCG.shade(x.l.color || x.p.color, 175) + '">' + visual(x.p, x.l.color) + '</a>' +
+        return '<div class="cart-row"><input type="checkbox" data-sel="' + x.i + '"' + (x.l.sel !== false ? ' checked' : '') + ' aria-label="Select ' + esc(x.p.name) + '"><a class="th" href="#p/' + x.p.id + '" aria-label="' + esc(x.p.name) + '" style="background:' + SCG.shade(x.l.color || x.p.color, 175) + '">' + visual(x.p, x.l.color) + '</a>' +
           '<div><h4><a href="#p/' + x.p.id + '">' + esc(x.p.name) + '</a></h4><small>' + (x.l.size ? 'Size: ' + esc(x.l.size) + ' · ' : '') + esc(x.p.brand) + '</small><div style="margin-top:6px">' + originTag(x.p) + '</div>' +
-          '<div class="qty" style="margin-top:8px"><button data-cq="-1" data-i="' + x.i + '" aria-label="Decrease quantity">−</button><span>' + x.l.qty + '</span><button data-cq="1" data-i="' + x.i + '" aria-label="Increase quantity">+</button></div>' + (inCart(x.p.id) > x.p.stock ? '<div class="stock-warn">' + (x.p.stock > 0 ? 'Only ' + x.p.stock + ' left. Lower the quantity to check out.' : 'Out of stock. Please remove it.') + '</div>' : '') + '</div>' +
+          '<div class="qty" style="margin-top:8px"><button data-cq="-1" data-i="' + x.i + '" aria-label="Decrease quantity">−</button><span>' + x.l.qty + '</span><button data-cq="1" data-i="' + x.i + '" aria-label="Increase quantity">+</button></div>' + (function (left) { return inCartFor(x.p, x.l.size) > left ? '<div class="stock-warn">' + (left > 0 ? 'Only ' + left + ' left' + (x.l.size && (x.p.variants || []).length ? ' in size ' + esc(x.l.size) : '') + '. Lower the quantity to check out.' : (x.l.size && (x.p.variants || []).length ? 'Size ' + esc(x.l.size) + ' is out of stock' : 'Out of stock') + '. Please remove it.') + '</div>' : ''; })(stockFor(x.p, x.l.size)) + '</div>' +
           '<div class="p">' + money(x.p.price * x.l.qty) + (x.p.comparePrice ? '<div style="font-size:12px;color:var(--muted);font-weight:400"><s>' + money(x.p.comparePrice * x.l.qty) + '</s></div>' : '') + '</div>' +
           '<button class="rm" data-rm="' + x.i + '" aria-label="Remove">' + I.trash + '</button></div>';
       }).join('') + '</div>' +
       '<aside class="panel summary"><h3>Order Summary</h3>' +
-      '<div class="sum-row"><span>Subtotal (' + t.items + ' items)</span><span>' + money(t.sub) + '</span></div>' +
+      '<div class="sum-row"><span>Subtotal (' + t.items + (t.items === 1 ? ' item)' : ' items)') + '</span><span>' + money(t.sub) + '</span></div>' +
       '<div class="sum-row"><span>Delivery fee</span><span>' + (t.ship ? money(t.ship) : 'FREE') + '</span></div>' +
       (t.need && t.items ? '<div class="free-note need">Add ' + money(t.need) + ' more for FREE delivery</div>' : t.items ? '<div class="free-note">🎉 You get FREE delivery</div>' : '') +
       '<div class="sum-row total"><span>Total</span><span>' + money(t.total) + '</span></div>' +
-      '<a class="btn full lg" href="#checkout" style="margin-top:12px"' + (t.items ? '' : ' aria-disabled="true" onclick="return false"') + '>Proceed to Checkout (' + t.items + ')</a></aside></div></div>';
+      '<a class="btn full lg"' + (t.items ? ' href="#checkout"' : ' aria-disabled="true"') + ' style="margin-top:12px">Proceed to Checkout (' + t.items + ')</a></aside></div></div>';
     app.onchange = function (e) {
       var cart = SCG.getCart();
       if (e.target.id === 'selAll') cart.forEach(function (l) { l.sel = e.target.checked; });
@@ -496,8 +682,8 @@
     app.onclick = function (e) {
       var cart = SCG.getCart(), b = e.target.closest('button'); if (!b) return;
       if (b.dataset.cq) {
-        var l = cart[+b.dataset.i], pr = SCG.productById(l.id), room = pr ? pr.stock - inCart(l.id, cart) : 0;
-        if (+b.dataset.cq > 0 && room <= 0) { toast('Only ' + (pr ? pr.stock : 0) + ' in stock'); return; }
+        var l = cart[+b.dataset.i], pr = SCG.productById(l.id), left = pr ? stockFor(pr, l.size) : 0, room = pr ? left - inCartFor(pr, l.size, cart) : 0;
+        if (+b.dataset.cq > 0 && room <= 0) { toast('Only ' + left + ' in stock' + (pr && l.size && (pr.variants || []).length ? ' in size ' + l.size : '')); return; }
         l.qty = Math.max(1, l.qty + +b.dataset.cq);
       }
       else if (b.dataset.rm) cart.splice(+b.dataset.rm, 1);
@@ -508,6 +694,7 @@
   }
 
   function renderCheckout() {
+    if (SCG.API) return renderCheckoutApi();
     setTitle('Checkout');
     var lines = cartLines().filter(function (x) { return x.l.sel !== false; });
     if (!lines.length) { location.hash = 'cart'; return; }
@@ -530,7 +717,7 @@
       '<label class="full">Note for delivery (optional)<textarea name="note" rows="2"></textarea></label>' +
       '<h3 style="margin-top:6px">Payment method</h3><div class="pay-opts full">' +
       (s.payCOD !== false ? '<label class="pay-opt"><input type="radio" name="pay" value="Cash on Delivery" required>' + I.cash + '<span><b>Cash on Delivery</b><br><small>Pay when your order arrives</small></span></label>' : '') +
-      (s.payBank ? '<label class="pay-opt"><input type="radio" name="pay" value="Bank Transfer" required>' + I.shield + '<span><b>Bank Transfer</b><br><small>Bank details are shown after you place the order</small></span></label>' : '') + '</div>' +
+      (bankReady() ? '<label class="pay-opt"><input type="radio" name="pay" value="Bank Transfer" required>' + I.shield + '<span><b>Bank Transfer</b><br><small>Bank details are shown after you place the order</small></span></label>' : '') + '</div>' +
       (impNames.length ? '<p class="full" style="margin:0;font-size:12.5px;color:var(--muted)">' + I.plane.replace('<svg', '<svg style="width:14px;height:14px;vertical-align:-2px"') + ' Imported items: ' + impNames.map(function (n) { return esc(n) + ' ' + esc(imported[n]) + ' days'; }).join(', ') + '.</p>' : '') +
       '<button class="btn lg full" style="grid-column:1/-1">Place Order · ' + money(t.total) + '</button></form>' +
       '<aside class="panel summary"><h3>Your order</h3>' + lines.map(function (x) { return '<div class="sum-row" style="gap:10px"><span style="color:var(--text)">' + esc(x.p.name) + ' <small style="color:var(--muted)">×' + x.l.qty + (x.l.size ? ' · ' + esc(x.l.size) : '') + '</small></span><span>' + money(x.p.price * x.l.qty) + '</span></div>'; }).join('') +
@@ -574,6 +761,420 @@
     };
   }
 
+  /* =========================================================
+     Server (API) mode pages: real accounts, orders and payments
+     Same look as the demo pages; the server decides prices, stock and payment state.
+     ========================================================= */
+  var DISTRICTS = ['Colombo', 'Gampaha', 'Kalutara', 'Kandy', 'Matale', 'Nuwara Eliya', 'Galle', 'Matara', 'Hambantota', 'Jaffna', 'Kilinochchi', 'Mannar', 'Vavuniya', 'Mullaitivu', 'Batticaloa', 'Ampara', 'Trincomalee', 'Kurunegala', 'Puttalam', 'Anuradhapura', 'Polonnaruwa', 'Badulla', 'Moneragala', 'Ratnapura', 'Kegalle'];
+  var ST_LABEL = { pending_payment: 'Waiting for payment', awaiting_bank_transfer: 'Waiting for your bank transfer', confirmed: 'Confirmed', processing: 'Packing', shipped: 'Shipped', arrived_lk: 'Arrived in Sri Lanka', delivered: 'Delivered', cancelled: 'Cancelled', expired: 'Payment time ran out', refunded: 'Refunded' };
+  var PAY_LABEL = { pending: 'Payment pending', paid: 'Paid', cod_pending: 'Pay on delivery', cod_collected: 'Paid (cash on delivery)', failed: 'Payment failed', cancelled: 'Payment cancelled', chargeback: 'Payment disputed', refunded: 'Refunded', partially_refunded: 'Partly refunded', unpaid: 'Not paid' };
+  var ST_IDX = { pending_payment: 0, awaiting_bank_transfer: 0, confirmed: 1, processing: 1, shipped: 2, arrived_lk: 3, delivered: 4 };
+  var PAY_VALUE = { 'Cash on Delivery': 'cod', 'Bank Transfer': 'bank_transfer', 'Card': 'payhere' };
+  function apiItems(lines) { return lines.map(function (x) { return { id: x.p.id, size: x.l.size || '', qty: x.l.qty }; }); }
+  function newKey() { var a = new Uint8Array(16); (window.crypto || {}).getRandomValues ? crypto.getRandomValues(a) : a.forEach(function (_, i) { a[i] = Math.random() * 256; }); return 'co-' + Array.prototype.map.call(a, function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); }
+
+  function orderStatusHTML(o) {
+    var closed = { cancelled: 1, expired: 1, refunded: 1 }[o.status];
+    var idx = ST_IDX[o.status] === undefined ? -1 : ST_IDX[o.status];
+    return (closed ? '<p style="color:var(--red)"><b>' + esc(ST_LABEL[o.status] || o.status) + '.</b></p>' :
+        '<div class="track-steps">' + STEPS.map(function (s, i) { return '<div class="' + (i <= idx ? 'done' : '') + '">' + s + '</div>'; }).join('') + '</div>') +
+      '<p style="font-size:13px;color:var(--muted)"><b>' + esc(ST_LABEL[o.status] || o.status) + '</b> · ' + esc(PAY_LABEL[o.paymentStatus] || o.paymentStatus) + ' · ' +
+        o.items.reduce(function (n, it) { return n + it.qty; }, 0) + ' item(s) · ' + money(o.total) + ' · placed ' + new Date(o.placedAt).toLocaleDateString() + '</p>' +
+      (o.bankInstructions ? '<p class="free-note need"><b>Bank transfer details:</b><br>' + esc(o.bankInstructions) + '<br>Use <b>' + esc(o.number) + '</b> as the reference. We confirm the order when the money reaches our account.</p>' : '') +
+      (o.shipments && o.shipments.length ? '<p style="font-size:13px">' + o.shipments.map(function (s) { return esc(s.carrier) + (s.trackingNumber ? ' · tracking <b>' + esc(s.trackingNumber) + '</b>' : ''); }).join('<br>') + '</p>' : '');
+  }
+
+  function renderCheckoutApi() {
+    setTitle('Checkout');
+    var lines = cartLines().filter(function (x) { return x.l.sel !== false; });
+    if (!lines.length) { location.hash = 'cart'; return; }
+    var s = db.settings, me = SCG.customer, saved = SCG.getProfile(), key = newKey(), coupon = '', quote = null;
+    var pre = me ? { name: me.name, phone: me.phone, email: me.email, address: me.address && me.address.line1, city: me.address && me.address.city, district: me.address && me.address.district } : saved;
+    app.innerHTML = '<div class="wrap"><div class="crumbs"><a href="#">Home</a>›<a href="#cart">Cart</a>›<span>Checkout</span></div><div class="cart-wrap">' +
+      '<form class="panel form" id="co">' +
+      (me ? '<div class="acct-note full">' + avatar(me) + '<span>Signed in as <b>' + esc(me.name) + '</b><br><small>This order will appear in My Account.</small></span><a href="#account" class="link-sm">My account</a></div>'
+        : '<div class="acct-note full new">' + I.user + '<span><b>Checking out as a guest.</b> You get a private tracking link after ordering. <a href="#account">Sign in or create an account</a> to keep all your orders in one place.</span></div>') +
+      '<h3>Delivery information</h3>' +
+      '<label>Full name<input name="name" required autocomplete="name" maxlength="80" placeholder="e.g. Nimal Perera"></label>' +
+      '<label>Phone number<input name="phone" required pattern="[+]?[0-9][0-9 ]{8,14}" title="Phone number, e.g. 077 123 4567" autocomplete="tel" placeholder="07X XXX XXXX"></label>' +
+      '<label class="full">Email <span id="emailHint">(optional, for order updates)</span><input name="email" type="email" autocomplete="email" maxlength="200" placeholder="you@example.com"></label>' +
+      '<label class="full">Address<input name="address" required autocomplete="street-address" maxlength="200" placeholder="House no, street, area"></label>' +
+      '<label>City<input name="city" required maxlength="60" placeholder="e.g. Nugegoda"></label>' +
+      '<label>District<select name="district">' + DISTRICTS.map(function (d) { return '<option>' + d + '</option>'; }).join('') + '</select></label>' +
+      '<label class="full">Note for delivery (optional)<textarea name="note" rows="2" maxlength="500"></textarea></label>' +
+      '<h3 style="margin-top:6px">Payment method</h3><div class="pay-opts full">' +
+      (s.payOnline ? '<label class="pay-opt"><input type="radio" name="pay" value="Card" required>' + I.shield + '<span><b>Card / online payment</b><br><small>Visa, Mastercard and more through PayHere</small></span></label>' : '') +
+      (s.payCOD ? '<label class="pay-opt"><input type="radio" name="pay" value="Cash on Delivery" required>' + I.cash + '<span><b>Cash on Delivery</b><br><small>Pay when your order arrives</small></span></label>' : '') +
+      (bankReady() ? '<label class="pay-opt"><input type="radio" name="pay" value="Bank Transfer" required>' + I.shield + '<span><b>Bank Transfer</b><br><small>Bank details are shown after you place the order</small></span></label>' : '') + '</div>' +
+      '<button class="btn lg full" id="placeBtn" style="grid-column:1/-1" disabled>Checking prices…</button></form>' +
+      '<aside class="panel summary"><h3>Your order</h3><div id="sumLines"></div>' +
+      '<div class="sum-row" style="border-top:1px solid var(--line);margin-top:6px;padding-top:10px"><span>Subtotal</span><span id="sumSub">…</span></div>' +
+      '<div class="sum-row" id="sumDiscRow" hidden><span>Promo code</span><span id="sumDisc"></span></div>' +
+      '<div class="sum-row"><span>Delivery</span><span id="sumShip">…</span></div>' +
+      '<div class="sum-row total"><span>Total</span><span id="sumTotal">…</span></div>' +
+      '<form id="cpf" style="display:flex;gap:6px;margin-top:10px"><input name="code" placeholder="Promo code" aria-label="Promo code" maxlength="30" style="flex:1;min-width:0"><button class="btn line" style="padding:8px 12px">Apply</button></form><p id="cpMsg" class="muted" style="font-size:12.5px;margin:6px 0 0"></p>' +
+      '</aside></div></div>';
+    var F = $('#co'), E = F.elements;
+    if (pre) ['name', 'phone', 'email', 'address', 'city', 'district'].forEach(function (k) { if (pre[k] && E[k]) E[k].value = pre[k]; });
+    var firstPay = $('#co input[name=pay]'); if (firstPay) firstPay.checked = true;
+    function coError(msg) { var el = $('#coErr'); if (!el) { el = document.createElement('div'); el.id = 'coErr'; el.className = 'co-err full'; el.setAttribute('role', 'alert'); F.insertBefore(el, F.firstChild); } el.textContent = msg; el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+    function payChoice() { var r = $('#co input[name=pay]:checked'); return r ? PAY_VALUE[r.value] : null; }
+    function syncEmail() { var card = payChoice() === 'payhere'; E.email.required = card; $('#emailHint').textContent = card ? '(needed for the card receipt)' : '(optional, for order updates)'; }
+    F.addEventListener('change', function (e) { if (e.target.name === 'pay') syncEmail(); }); syncEmail();
+    function showQuote(q) {
+      quote = q;
+      $('#sumLines').innerHTML = q.lines.map(function (l) { return '<div class="sum-row" style="gap:10px"><span style="color:var(--text)">' + esc(l.name) + ' <small style="color:var(--muted)">×' + l.qty + (l.size ? ' · ' + esc(l.size) : '') + '</small></span><span>' + money(l.lineTotal) + '</span></div>'; }).join('');
+      $('#sumSub').innerHTML = money(q.subtotal); $('#sumShip').innerHTML = q.shipping ? money(q.shipping) : 'FREE'; $('#sumTotal').innerHTML = money(q.total);
+      $('#sumDiscRow').hidden = !q.discount; $('#sumDisc').innerHTML = q.discount ? '−' + money(q.discount) : '';
+      $('#cpMsg').textContent = q.couponError || (q.coupon ? 'Code ' + q.coupon + ' applied.' : '');
+      var b = $('#placeBtn'); b.disabled = !q.lines.length; b.innerHTML = 'Place Order · ' + money(q.total);
+      if (q.issues && q.issues.length) coError('Some items changed: ' + q.issues.map(function (i) { var p = SCG.productById(i.id); return (p ? p.name : i.id) + (i.size ? ' (' + i.size + ')' : '') + (i.problem === 'reduced' ? ' — only ' + i.available + ' left' : ' — sold out'); }).join('; ') + '. The total below is for what is available. Go back to your cart to change it.');
+    }
+    function requote() { return SCG.quote(apiItems(lines), coupon).then(showQuote, function (err) { coError(err.message); }); }
+    requote();
+    $('#cpf').onsubmit = function (e) { e.preventDefault(); coupon = e.target.elements.code.value.trim(); requote(); };
+    F.onsubmit = function (e) {
+      e.preventDefault();
+      if (!quote) return;
+      if (quote.issues && quote.issues.length) { coError('Please update your cart first: some items are no longer available in the quantity you chose.'); return; }
+      var blank = ['name', 'phone', 'address', 'city'].filter(function (k) { return !String(E[k].value || '').trim(); })[0];
+      if (blank) { coError('Please fill in your ' + blank + '.'); E[blank].value = ''; E[blank].focus(); return; }
+      var pay = payChoice(); if (!pay) { coError('Please choose how you want to pay.'); return; }
+      var body = { items: apiItems(lines), payment: pay, coupon: coupon || null, expectedTotal: quote.total,
+        customer: { name: E.name.value.trim(), phone: E.phone.value.trim(), email: E.email.value.trim(), address: E.address.value.trim(), city: E.city.value.trim(), district: E.district.value, note: E.note.value.trim() } };
+      var btn = $('#placeBtn'); btn.disabled = true; btn.textContent = 'Placing your order…';
+      SCG.api('POST', '/orders', body, { idempotencyKey: key }).then(function (o) {
+        SCG.rememberOrder(o.orderNumber, o.trackingToken);
+        SCG.saveProfile({ name: body.customer.name, phone: body.customer.phone, email: body.customer.email, address: body.customer.address, city: body.customer.city, district: body.customer.district, createdAt: new Date().toISOString(), source: 'checkout on this device' });
+        updateAccount();
+        SCG.saveCart(SCG.getCart().filter(function (l) { return l.sel === false; })); updateCounts();
+        SCG.refresh().then(function () { db = SCG.load(); });   // stock numbers on product pages
+        if (o.payhere) return goToPayHere(o);
+        app.innerHTML = '<div class="wrap"><div class="panel success" style="margin-top:16px"><div class="tick">' + I.check + '</div><h2 style="margin:0 0 6px">Thank you! Your order is placed.</h2>' +
+          '<p>Order number <b>' + esc(o.orderNumber) + '</b> · Total <b>' + money(o.total) + '</b></p>' +
+          (pay === 'cod' ? '<p style="color:var(--muted)">We will call ' + esc(body.customer.phone) + ' to confirm. Please keep ' + money(o.total) + ' ready when it arrives.</p>' : '') +
+          (o.bankInstructions ? '<p class="free-note need" style="max-width:520px;margin:12px auto"><b>Bank transfer details:</b><br>' + esc(o.bankInstructions) + '<br>Use <b>' + esc(o.orderNumber) + '</b> as the reference. We hold your items for 48 hours and confirm when the money arrives.</p>' : '') +
+          '<p class="muted" style="font-size:13px">This browser remembers your private tracking link. ' + (body.customer.email ? '' : 'Save your order number to track it from another device.') + '</p>' +
+          '<div style="display:flex;gap:10px;justify-content:center;margin-top:18px;flex-wrap:wrap"><a class="btn navy" href="#order/' + esc(o.orderNumber) + '">Track order</a><a class="btn line" href="#">Continue shopping</a></div></div></div>';
+        scrollTo(0, 0);
+      }, function (err) {
+        btn.disabled = false; btn.innerHTML = 'Place Order · ' + money(quote.total);
+        if (err.code === 'duplicate_order' && err.data && err.data.details) { location.hash = 'order/' + err.data.details.orderNumber; return; }
+        if (err.code === 'stock_changed' || err.code === 'price_changed') { SCG.refresh().then(function () { db = SCG.load(); requote(); }); }
+        key = newKey();
+        coError(err.message);
+      });
+    };
+  }
+  function goToPayHere(o) {
+    app.innerHTML = '<div class="wrap"><div class="panel success" style="margin-top:16px"><h2>Taking you to PayHere to pay securely…</h2><p class="muted">Order <b>' + esc(o.orderNumber) + '</b> · ' + money(o.total) + '. Your items are held for you while you pay.</p></div></div>';
+    var f = document.createElement('form'); f.method = 'POST'; f.action = o.payhere.action;
+    Object.keys(o.payhere.fields).forEach(function (k) { var i = document.createElement('input'); i.type = 'hidden'; i.name = k; i.value = o.payhere.fields[k]; f.appendChild(i); });
+    document.body.appendChild(f); f.submit();
+  }
+
+  // #order/<number>: the PayHere return page and the "Track order" link. Shows what the SERVER says — never trusts the redirect.
+  function renderOrderApi(number) {
+    setTitle('Your order');
+    var mine = SCG.myOrders().filter(function (x) { return x.number === number; })[0];
+    app.innerHTML = '<div class="wrap"><div class="crumbs"><a href="#">Home</a>›<span>Order ' + esc(number) + '</span></div><div class="panel" style="max-width:720px;margin:0 auto;padding:22px" id="ordBox"><p class="muted">Loading your order…</p></div></div>';
+    var tries = 0;
+    function load() {
+      var p = SCG.customer ? SCG.api('GET', '/account/orders/' + encodeURIComponent(number)).catch(function () { return mine ? SCG.trackOrder(number, mine.token) : Promise.reject(new Error('not found')); })
+        : mine ? SCG.trackOrder(number, mine.token) : Promise.reject(new Error('not found'));
+      p.then(function (o) {
+        var waiting = o.paymentMethod === 'payhere' && o.paymentStatus === 'pending' && o.status === 'pending_payment';
+        $('#ordBox').innerHTML = '<h2 style="margin-top:0">Order ' + esc(o.number) + '</h2>' +
+          (waiting ? '<p class="free-note need"><b>Waiting for PayHere to confirm your payment.</b> This page updates by itself. If you closed the payment page without paying, your items are released after 30 minutes.</p>' : '') +
+          (o.paymentStatus === 'paid' && o.paymentMethod === 'payhere' ? '<p class="free-note"><b>Payment received.</b> Thank you!</p>' : '') +
+          orderStatusHTML(o) +
+          '<div style="margin-top:12px">' + o.items.map(function (it) { return '<div class="sum-row"><span><a href="#p/' + esc(it.id) + '">' + esc(it.name) + '</a> <small class="muted">×' + it.qty + (it.variant ? ' · ' + esc(it.variant) : '') + '</small></span><span>' + money(it.lineTotal) + '</span></div>'; }).join('') +
+          '<div class="sum-row"><span>Delivery</span><span>' + (o.shipping ? money(o.shipping) : 'FREE') + '</span></div>' + (o.discount ? '<div class="sum-row"><span>Promo code</span><span>−' + money(o.discount) + '</span></div>' : '') +
+          '<div class="sum-row total"><span>Total</span><span>' + money(o.total) + '</span></div></div>' +
+          (o.customer && o.customer.address ? '<p class="muted" style="font-size:13px">Delivering to ' + esc(o.customer.name) + ', ' + esc(o.customer.address) + ', ' + esc(o.customer.city) + ', ' + esc(o.customer.district) + '</p>' : '') +
+          (o.status === 'delivered' ? '<div id="ordRev"></div>' : '') + (o.status === 'delivered' || o.status === 'refunded' ? '<div id="ordRet"></div>' : '');
+        if (o.status === 'delivered') orderReviewsUI(number, mine && mine.token);
+        if (o.status === 'delivered' || o.status === 'refunded') returnsUI(number, mine && mine.token, $('#ordRet'));
+        if (waiting && tries++ < 40) setTimeout(function () { if (location.hash === '#order/' + number) load(); }, 4000);
+      }, function () {
+        $('#ordBox').innerHTML = '<h2 style="margin-top:0">Order ' + esc(number) + '</h2><p>This order is not saved on this device. Track it with your phone number instead:</p><p><a class="btn navy" href="#track/' + esc(number) + '">Track with phone number</a></p>';
+      });
+    }
+    load();
+  }
+
+  function renderTrackApi(pre) {
+    setTitle('Track order');
+    app.innerHTML = '<div class="wrap"><div class="crumbs"><a href="#">Home</a>›<span>Track my order</span></div>' +
+      '<form class="panel form" id="tf" style="max-width:640px;margin:0 auto"><h3>Track your order</h3><label>Order number<input name="id" required value="' + esc(pre || '') + '" placeholder="e.g. SC-261108-ABC123" maxlength="20"></label>' +
+      '<label>Phone number used for the order<input name="phone" required placeholder="07X XXX XXXX" maxlength="20"></label><button class="btn navy full" style="grid-column:1/-1">Track</button><div class="full" id="tr"></div></form>' +
+      (SCG.myOrders().length ? '<div class="panel" style="max-width:640px;margin:14px auto;padding:16px"><h3 style="margin-top:0">Orders placed on this device</h3>' + SCG.myOrders().map(function (o) { return '<div class="sum-row"><a href="#order/' + esc(o.number) + '">' + esc(o.number) + '</a><span class="muted">' + new Date(o.at).toLocaleDateString() + '</span></div>'; }).join('') + '</div>' : '') + '</div>';
+    $('#tf').onsubmit = function (e) {
+      e.preventDefault(); var f = e.target, n = f.id.value.trim().toUpperCase();
+      $('#tr').innerHTML = '<p class="muted">Checking…</p>';
+      SCG.trackOrder(n, null, f.phone.value).then(function (o) { $('#tr').innerHTML = orderStatusHTML(o); }, function (err) {
+        $('#tr').innerHTML = '<p style="color:var(--red)">' + esc(err.status === 404 ? 'We could not find an order with that number and phone. Check both, or call us on ' + db.settings.phone + '.' : err.message) + '</p>';
+      });
+    };
+  }
+
+  // profile photo: up to 2 MB (checked here and by the server); made smaller (max 512 px, JPEG) before it is sent
+  var PHOTO_MAX = 2 * 1024 * 1024;
+  function photoProblem(f) {
+    if (!f) return '';
+    if (!/^image\/(jpeg|png|webp)$/.test(f.type)) return 'Use a JPEG, PNG or WebP photo.';
+    if (f.size > PHOTO_MAX) return 'The photo is ' + (f.size / 1048576).toFixed(1) + ' MB. Choose one up to 2 MB.';
+    return '';
+  }
+  function shrinkPhoto(f, maxPx) {
+    return new Promise(function (resolve) {
+      try {
+        var url = URL.createObjectURL(f), img = new Image();
+        img.onload = function () {
+          try {
+            var k = Math.min(1, (maxPx || 512) / Math.max(img.naturalWidth, img.naturalHeight)), c = document.createElement('canvas');
+            c.width = Math.max(1, Math.round(img.naturalWidth * k)); c.height = Math.max(1, Math.round(img.naturalHeight * k));
+            var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(img, 0, 0, c.width, c.height);
+            URL.revokeObjectURL(url);
+            c.toBlob(function (b) { resolve(b && b.size && b.size < f.size ? b : f); }, 'image/jpeg', 0.85);
+          } catch (e) { resolve(f); }
+        };
+        img.onerror = function () { URL.revokeObjectURL(url); resolve(f); };
+        img.src = url;
+      } catch (e) { resolve(f); }
+    });
+  }
+  function photoField(id, cur) {
+    return '<div class="full photo-pick"><span class="pp-prev" id="' + id + 'Prev">' + (cur ? '<img src="' + esc(cur) + '" alt="">' : I.user) + '</span>' +
+      '<div><b>Profile photo</b> <small class="muted">(optional)</small><br><small class="muted">JPEG, PNG or WebP, up to 2 MB. It is shown next to your reviews.</small><br>' +
+      '<label class="btn line sm pp-btn">' + (cur ? 'Change photo' : 'Choose photo') + '<input type="file" id="' + id + '" accept="image/jpeg,image/png,image/webp" hidden></label>' +
+      (cur ? ' <button type="button" class="link-sm" id="' + id + 'Del">Remove</button>' : '') + '<div class="pp-err" id="' + id + 'Err"></div></div></div>';
+  }
+  function wirePhoto(id, onPick) {
+    var inp = $('#' + id); if (!inp) return;
+    inp.onchange = function () {
+      var f = inp.files && inp.files[0], bad = photoProblem(f);
+      $('#' + id + 'Err').textContent = bad;
+      if (bad || !f) { inp.value = ''; onPick(null); return; }
+      var u = URL.createObjectURL(f); $('#' + id + 'Prev').innerHTML = '<img src="' + u + '" alt="">';
+      onPick(f);
+    };
+  }
+  function districtOptions(sel) { return '<option value="">Choose…</option>' + DISTRICTS.map(function (d) { return '<option' + (d === sel ? ' selected' : '') + '>' + d + '</option>'; }).join(''); }
+  var PHONE = 'pattern="[+]?[0-9][0-9 ]{8,14}" title="A phone number, e.g. 077 123 4567"';
+
+  // ---------- return / refund requests (API mode): buyers of a delivered order, inside the return window ----------
+  var RET_REASON = { damaged: 'Arrived damaged', not_working: 'Does not work / faulty', wrong_item: 'Wrong item sent', not_as_described: 'Different from the description or photos', missing_parts: 'Parts or items missing' };
+  var RET_STATUS = { requested: 'Waiting for the shop', approved: 'Approved', rejected: 'Not accepted', received: 'Item received by the shop', refunded: 'Refunded', replaced: 'Replacement sent', cancelled: 'Withdrawn' };
+  var RET_NEXT = { requested: 'We will check your request and reply here.', approved: 'Please keep the item and all its parts ready. We will contact you to collect it, or tell you where to send it.',
+    received: 'We have the item and are finishing your refund or replacement.' };
+  function fileToDataUrl(b) { return new Promise(function (ok, no) { var r = new FileReader(); r.onload = function () { ok(r.result); }; r.onerror = function () { no(new Error('The photo could not be read.')); }; r.readAsDataURL(b); }); }
+  function returnsUI(number, token, box) {
+    if (!box) return;
+    SCG.api('POST', '/orders/returns', { number: number, token: token || null }).then(function (d) {
+      if (!document.body.contains(box)) return;
+      var bankNeeded = d.paymentMethod === 'cod' || d.paymentMethod === 'bank_transfer';
+      var reqs = d.requests.map(function (q) {
+        return '<div class="ret-req"><div class="ret-req-top"><b>Return request #' + q.id + '</b><span class="ret-st ' + esc(q.status) + '">' + esc(RET_STATUS[q.status] || q.status) + '</span></div>' +
+          '<small class="muted">' + new Date(q.createdAt).toLocaleDateString() + ' · ' + esc(RET_REASON[q.reason] || q.reason) + ' · ' + (q.wants === 'refund' ? 'Refund' : 'Replacement') + (q.photos ? ' · ' + q.photos + ' photo' + (q.photos === 1 ? '' : 's') : '') + '</small>' +
+          '<ul class="ret-items">' + q.items.map(function (it) { return '<li>' + esc(it.name) + (it.variant ? ' <small class="muted">' + esc(it.variant) + '</small>' : '') + ' ×' + it.qty + '</li>'; }).join('') + '</ul>' +
+          (q.staffNote ? '<div class="rev-reply"><b>Message from Source Connect</b><p>' + esc(q.staffNote) + '</p></div>' : '') +
+          (q.refund ? '<p class="ret-ok">Refunded ' + money(q.refund) + '</p>' : '') +
+          (RET_NEXT[q.status] ? '<p class="muted" style="margin:6px 0 0;font-size:13px">' + RET_NEXT[q.status] + '</p>' : '') +
+          (q.status === 'requested' ? '<button type="button" class="link-sm" data-ret-cancel="' + q.id + '">Withdraw this request</button>' : '') + '</div>';
+      }).join('');
+      var can = d.items.filter(function (it) { return it.returnable > 0; });
+      var form = !d.eligible ? '<p class="muted" style="margin:8px 0">' + esc(d.message) + '</p>' :
+        '<form class="ret-form form"><p class="full muted" style="margin:0;font-size:13px">You can ask within ' + d.windowDays + ' days of delivery' + (d.deadline ? ' (until ' + new Date(d.deadline).toLocaleDateString() + ')' : '') + '. Change of mind is not a reason for a return.</p>' +
+          '<div class="full"><b>Which items?</b>' + can.map(function (it) {
+            return '<label class="ret-item"><input type="checkbox" name="it" value="' + esc(it.id) + '"><span>' + esc(it.name) + (it.variant ? ' <small class="muted">' + esc(it.variant) + '</small>' : '') + '</span>' +
+              (it.returnable > 1 ? '<select data-q="' + esc(it.id) + '" aria-label="How many">' + Array.from({ length: it.returnable }, function (_, i) { return '<option>' + (i + 1) + '</option>'; }).join('') + '</select>' : '<span class="muted">×1</span>') + '</label>';
+          }).join('') + '</div>' +
+          '<label class="full">Reason<select name="reason" required><option value="">Choose…</option>' + Object.keys(RET_REASON).map(function (k) { return '<option value="' + k + '">' + RET_REASON[k] + '</option>'; }).join('') + '</select></label>' +
+          '<label class="full">What is wrong?<textarea name="details" rows="3" required minlength="10" maxlength="1000" placeholder="Tell us what happened (at least 10 characters)"></textarea></label>' +
+          '<div class="full"><b>What would you like?</b><br><label class="chk"><input type="radio" name="wants" value="refund" checked> Money back (refund)</label> <label class="chk"><input type="radio" name="wants" value="replacement"> A replacement</label></div>' +
+          (bankNeeded ? '<div class="full ret-bank"><b>Bank account for the refund</b><div class="ret-bank-grid">' +
+              '<label>Bank<input name="bank" maxlength="60" placeholder="e.g. Commercial Bank"></label><label>Branch<input name="branch" maxlength="60"></label>' +
+              '<label>Account holder<input name="accountName" maxlength="80"></label><label>Account number<input name="accountNumber" maxlength="30" inputmode="numeric" pattern="[0-9 \\-]{4,30}"></label></div></div>'
+            : '<p class="full muted ret-card" style="margin:0;font-size:13px">A refund goes back to the card you paid with.</p>') +
+          '<div class="full"><b>Photos</b> <small class="muted">(up to 3, JPEG/PNG/WebP, 2 MB each — they help us decide faster)</small><br><input type="file" name="photos" accept="image/jpeg,image/png,image/webp" multiple><div class="ret-thumbs"></div><div class="pp-err ret-perr"></div></div>' +
+          '<button class="btn navy">Send request</button></form>';
+      box.innerHTML = '<h3 style="margin:14px 0 6px">Return / Refund</h3>' + reqs + form;
+      var f = box.querySelector('.ret-form'), files = [];
+      if (f) {
+        var bankBox = f.querySelector('.ret-bank'), card = f.querySelector('.ret-card');
+        var syncWants = function () { var w = (f.querySelector('input[name=wants]:checked') || {}).value;
+          if (bankBox) { bankBox.style.display = w === 'refund' ? '' : 'none'; $$('input', bankBox).forEach(function (i) { i.required = w === 'refund' && i.name !== 'branch'; }); }
+          if (card) card.style.display = w === 'refund' ? '' : 'none'; };
+        f.addEventListener('change', function (e) {
+          if (e.target.name === 'wants') syncWants();
+          if (e.target.name === 'photos') {
+            var list = Array.prototype.slice.call(e.target.files || []), bad = '';
+            if (list.length > 3) bad = 'Choose up to 3 photos.';
+            list.forEach(function (x) { bad = bad || photoProblem(x); });
+            f.querySelector('.ret-perr').textContent = bad;
+            files = bad ? [] : list; if (bad) e.target.value = '';
+            f.querySelector('.ret-thumbs').innerHTML = files.map(function (x) { return '<img src="' + URL.createObjectURL(x) + '" alt="">'; }).join('');
+          }
+        });
+        syncWants();
+        f.onsubmit = function (e) {
+          e.preventDefault(); var E = f.elements, btn = f.querySelector('button.btn');
+          var items = $$('input[name=it]:checked', f).map(function (c) { var s = f.querySelector('select[data-q="' + c.value + '"]'); return { id: c.value, qty: s ? +s.value : 1 }; });
+          if (!items.length) { toast('Choose the item(s) to return'); return; }
+          var wants = (f.querySelector('input[name=wants]:checked') || {}).value;
+          var data = { items: items, reason: E.reason.value, details: E.details.value.trim(), wants: wants };
+          if (bankBox && wants === 'refund') data.bank = { bank: E.bank.value.trim(), branch: E.branch.value.trim(), accountName: E.accountName.value.trim(), accountNumber: E.accountNumber.value.trim() };
+          btn.disabled = true; btn.textContent = files.length ? 'Sending photos…' : 'Sending…';
+          var paths = [];
+          files.reduce(function (p, x) {
+            return p.then(function () { return shrinkPhoto(x, 1280); }).then(fileToDataUrl)
+              .then(function (u) { return SCG.api('POST', '/orders/returns/photo', { number: number, token: token || null, image: u }); })
+              .then(function (r) { paths.push(r.path); });
+          }, Promise.resolve())
+            .then(function () { data.photos = paths; return SCG.api('POST', '/orders/returns/create', { number: number, token: token || null, data: data }); })
+            .then(function () { toast('Your return request was sent. We will reply here.'); returnsUI(number, token, box); },
+              function (err) { btn.disabled = false; btn.textContent = 'Send request'; toast(err.message); });
+        };
+      }
+      box.onclick = function (e) {
+        var c = e.target.closest('[data-ret-cancel]'); if (!c) return;
+        if (!confirm('Withdraw this return request?')) return;
+        SCG.api('POST', '/orders/returns/cancel', { number: number, token: token || null, id: +c.dataset.retCancel }).then(function () { toast('Request withdrawn'); returnsUI(number, token, box); }, function (err) { toast(err.message); });
+      };
+    }, function (err) { if (document.body.contains(box)) box.innerHTML = '<p class="muted" style="margin:8px 0">' + esc(err.message) + '</p>'; });
+  }
+
+  function renderAccountApi() {
+    setTitle('My account');
+    var me = SCG.customer;
+    if (!me) {
+      var regPhoto = null, s = db.settings || {};
+      // "Continue with Google": stays hidden until the owner switches Google on in Supabase
+      var gSlot = '<div class="full g-slot" hidden><button type="button" class="g-btn" data-google><svg viewBox="0 0 48 48" width="18" height="18" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.6 13.2l7.9 6.2C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.8c4.3-4 6.9-9.9 6.9-17.2z"/><path fill="#FBBC05" d="M10.5 28.6c-.5-1.4-.8-3-.8-4.6s.3-3.2.8-4.6l-7.9-6.2C.9 16.6 0 20.2 0 24s.9 7.4 2.6 10.8l7.9-6.2z"/><path fill="#34A853" d="M24 48c6.5 0 11.9-2.1 15.9-5.8l-7.4-5.8c-2.1 1.4-4.8 2.3-8.5 2.3-6.3 0-11.6-4.1-13.5-9.9l-7.9 6.2C6.6 42.6 14.6 48 24 48z"/></svg><span>Continue with Google</span></button><div class="g-or"><span>or</span></div></div>';
+      app.innerHTML = '<div class="wrap"><div class="crumbs"><a href="#">Home</a>›<span>My account</span></div><div class="acct-grid">' +
+        '<form class="panel form" id="loginF"><h3>Sign in</h3>' + gSlot + '<label class="full">Email<input name="email" type="email" required autocomplete="email"></label>' +
+          '<label class="full">Password<input name="password" type="password" required autocomplete="current-password"></label>' +
+          '<button class="btn navy full" style="grid-column:1/-1">Sign in</button>' +
+          '<p class="full muted" style="margin:0;font-size:13px">Forgot your password? Call' + (s.whatsapp ? ' or WhatsApp' : '') + ' us on <b>' + esc(s.phone || '') + '</b> and we will set a new one for you.</p>' +
+          '<p class="full co-msg" id="loginMsg" style="margin:0;color:var(--red)"></p></form>' +
+        '<form class="panel form" id="regF"><h3>Create an account</h3><p class="full" style="margin:0;color:var(--muted);font-size:13px">Optional: you can always check out as a guest. An account keeps your orders, address and reviews together.</p>' + gSlot +
+          '<label class="full">Full name<input name="name" required minlength="2" maxlength="80" autocomplete="name"></label>' +
+          '<label class="full">Email<input name="email" type="email" required maxlength="120" autocomplete="email"></label>' +
+          '<label>Phone number<input name="phone" type="tel" required maxlength="20" ' + PHONE + ' autocomplete="tel"></label>' +
+          '<label>Other phone (optional)<input name="phone2" type="tel" maxlength="20" ' + PHONE + '></label>' +
+          '<label class="full">Address<input name="line1" required minlength="4" maxlength="200" autocomplete="street-address" placeholder="House number, street"></label>' +
+          '<label>City<input name="city" required minlength="2" maxlength="60" autocomplete="address-level2"></label>' +
+          '<label>District<select name="district" required>' + districtOptions('') + '</select></label>' +
+          '<label class="full">Password (8+ characters)<input name="password" type="password" required minlength="8" maxlength="72" autocomplete="new-password"></label>' +
+          photoField('regPhoto', '') +
+          '<button class="btn full" style="grid-column:1/-1">Create account</button><p class="full" id="regMsg" style="margin:0;color:var(--red)"></p></form></div>' +
+        (SCG.myOrders().length ? '<div class="panel" style="padding:16px;margin-top:14px"><h3 style="margin-top:0">Orders placed on this device</h3>' + SCG.myOrders().map(function (o) { return '<div class="sum-row"><a href="#order/' + esc(o.number) + '">' + esc(o.number) + '</a><span class="muted">' + new Date(o.at).toLocaleDateString() + '</span></div>'; }).join('') + '</div>' : '') + '</div>';
+      wirePhoto('regPhoto', function (f) { regPhoto = f; });
+      var done = function (c) {
+        if (c && c.pendingConfirmation) { $('#regMsg').textContent = 'Your account was created, but it still needs to be switched on. Please call us on ' + (s.phone || '') + '.'; return; }
+        updateAccount(); toast('Welcome, ' + c.name.split(' ')[0] + '!'); renderAccountApi();
+      };
+      $('#loginF').onsubmit = function (e) { e.preventDefault(); var E = e.target.elements; SCG.customerAuth('login', { email: E.email.value.trim(), password: E.password.value }).then(done, function (err) { $('#loginMsg').textContent = err.message; }); };
+      $('#regF').onsubmit = function (e) {
+        e.preventDefault(); var E = e.target.elements, btn = e.target.querySelector('button.btn');
+        var bad = photoProblem(regPhoto); if (bad) { $('#regMsg').textContent = bad; return; }
+        $('#regMsg').textContent = ''; btn.disabled = true;
+        SCG.customerAuth('register', { name: E.name.value.trim(), email: E.email.value.trim(), phone: E.phone.value.trim(), phone2: E.phone2.value.trim(),
+          address: { line1: E.line1.value.trim(), city: E.city.value.trim(), district: E.district.value }, password: E.password.value })
+          .then(function (c) {
+            if (!c || c.pendingConfirmation || !regPhoto) return c;
+            return shrinkPhoto(regPhoto).then(function (b) { return SCG.api('POST', '/account/avatar', { file: b }); })
+              .then(function (r) { SCG.customer = r.customer; return r.customer; }, function (err) { toast('Your account is ready, but the photo was not saved: ' + err.message + ' Add it in My account.'); return c; });
+          })
+          .then(done, function (err) { btn.disabled = false; $('#regMsg').textContent = err.message; });
+      };
+      if (window.SCG_AUTH_NOTICE) { $('#loginMsg').textContent = window.SCG_AUTH_NOTICE; window.SCG_AUTH_NOTICE = null; }   // e.g. an email link that has expired
+      var SBk = window.SCGSupabase;
+      if (SBk && SBk.providers) SBk.providers().then(function (ext) {
+        if (!ext || ext.google !== true) return;
+        Array.prototype.forEach.call(app.querySelectorAll('.g-slot'), function (slot) {
+          slot.hidden = false;
+          slot.querySelector('[data-google]').onclick = function () {
+            var b = this; b.disabled = true;
+            SBk.oauthStart('google').catch(function (err) { b.disabled = false; $('#loginMsg').textContent = err.message; });
+          };
+        });
+      });
+      return;
+    }
+    var newPhoto = null;
+    app.innerHTML = '<div class="wrap"><div class="crumbs"><a href="#">Home</a>›<span>My account</span></div><div class="panel acct-head acct-hero"><div class="acct-banner" aria-hidden="true"></div>' +
+      '<div class="acct-id">' + avatar(me) + '<div class="acct-who"><h2>Hello, ' + esc(me.name.split(' ')[0]) + '</h2><small>' + esc(me.email || '') + '</small></div>' +
+        '<button type="button" class="btn line sm acct-edit" id="acctEdit">Edit my details</button></div>' +
+      '<div class="acct-kpis" id="acctKpis"><div><small>Orders</small><b data-k="all">–</b></div><div><small>On the way</small><b data-k="open">–</b></div><div><small>Delivered</small><b data-k="done">–</b></div><div><small>Wishlist</small><b>' + SCG.getWish().length + '</b></div></div></div>' +
+      '<div class="acct-grid"><div class="panel" id="myOrders"><p class="muted" style="padding:16px">Loading your orders…</p></div><div>' +
+      '<form class="panel form" id="profForm"><h3>My details</h3><label class="full">Full name<input name="name" required minlength="2" maxlength="80" value="' + esc(me.name) + '"></label>' +
+        '<label>Phone number<input name="phone" type="tel" maxlength="20" ' + PHONE + ' value="' + esc(me.phone || '') + '"></label>' +
+        '<label>Other phone<input name="phone2" type="tel" maxlength="20" ' + PHONE + ' value="' + esc(me.phone2 || '') + '"></label>' +
+        '<label class="full">Address<input name="line1" maxlength="200" value="' + esc(me.address ? me.address.line1 : '') + '"></label><label>City<input name="city" maxlength="60" value="' + esc(me.address ? me.address.city : '') + '"></label>' +
+        '<label>District<select name="district">' + districtOptions(me.address ? me.address.district : '') + '</select></label>' +
+        photoField('meP', me.avatarUrl || '') +
+        '<button class="btn navy full" style="grid-column:1/-1">Save details</button></form>' +
+      '<div class="panel acct-side"><a class="btn line full" href="#wishlist">My wishlist</a><button class="btn line full" id="signOut">Sign out</button></div></div></div></div>';
+    wirePhoto('meP', function (f) { newPhoto = f; });
+    var del = $('#mePDel');
+    if (del) del.onclick = function () {
+      if (!confirm('Remove your profile photo?')) return;
+      SCG.api('POST', '/account/avatar', { file: null, previous: me.avatar }).then(function (r) { SCG.customer = r.customer; updateAccount(); toast('Photo removed'); renderAccountApi(); }, function (err) { toast(err.message); });
+    };
+    SCG.api('GET', '/account/orders').then(function (list) {
+      var kp = { all: list.length, open: 0, done: 0 };
+      list.forEach(function (o) { if (o.status === 'delivered') kp.done++; else if (!{ cancelled: 1, expired: 1, refunded: 1 }[o.status]) kp.open++; });
+      Array.prototype.forEach.call(document.querySelectorAll('#acctKpis b[data-k]'), function (b) { b.textContent = kp[b.dataset.k]; });
+      $('#myOrders').innerHTML = '<div class="sec-head" style="padding:14px 16px 0"><h2 style="font-size:17px">My orders</h2></div>' + (list.length ? list.map(function (o) {
+        var idx = ST_IDX[o.status] === undefined ? -1 : ST_IDX[o.status], bad = { cancelled: 1, expired: 1, refunded: 1 }[o.status];
+        return '<div class="acct-order"><div class="ao-top"><b>' + esc(o.number) + '</b><span class="ao-status ' + (bad ? 'x' : o.status === 'delivered' ? 'ok' : '') + '">' + esc(ST_LABEL[o.status] || o.status) + '</span><span class="muted">' + new Date(o.placedAt).toLocaleDateString() + ' · ' + money(o.total) + '</span></div>' +
+          (!bad ? '<div class="ao-bar">' + [0, 1, 2, 3, 4].map(function (i) { return '<i class="' + (i <= idx ? 'on' : '') + '"></i>'; }).join('') + '</div>' : '') +
+          '<div class="ao-actions"><a class="link-sm" href="#order/' + esc(o.number) + '">Details</a>' + (o.status === 'delivered' ? ' <button type="button" class="btn sm rev-open" data-rev="' + esc(o.number) + '">★ Rate &amp; review</button>' : '') +
+          (o.status === 'delivered' || o.status === 'refunded' ? ' <button type="button" class="btn sm line ret-open" data-ret="' + esc(o.number) + '">↩ Return / Refund</button>' : '') + '</div>' +
+          (o.status === 'delivered' ? '<div class="ao-rev" id="rev-' + esc(o.number) + '" hidden></div>' : '') +
+          (o.status === 'delivered' || o.status === 'refunded' ? '<div class="ao-rev" id="ret-' + esc(o.number) + '" hidden></div>' : '') + '</div>';
+      }).join('') : '<p class="empty">No orders yet.</p>');
+      $('#myOrders').onclick = function (e) {
+        var rb = e.target.closest('.ret-open');
+        if (rb) { var rbox = document.getElementById('ret-' + rb.dataset.ret); if (!rbox) return; rbox.hidden = !rbox.hidden;
+          if (!rbox.hidden) { rbox.innerHTML = '<p class="muted" style="margin:8px 0">Loading…</p>'; returnsUI(rb.dataset.ret, null, rbox); } return; }
+        var b = e.target.closest('.rev-open'); if (!b) return;
+        var box = document.getElementById('rev-' + b.dataset.rev); if (!box) return;
+        box.hidden = !box.hidden;
+        if (!box.hidden) { box.innerHTML = '<p class="muted" style="margin:8px 0">Loading…</p>'; orderReviewsUI(b.dataset.rev, null, box); }
+      };
+    }, function (err) { $('#myOrders').innerHTML = '<p class="empty">' + esc(err.message) + '</p>'; });
+    $('#profForm').onsubmit = function (e) {
+      e.preventDefault(); var E = e.target.elements, btn = e.target.querySelector('button.btn');
+      var body = { name: E.name.value.trim(), phone: E.phone.value.trim(), phone2: E.phone2.value.trim() };
+      if (E.line1.value.trim()) {
+        if (!E.district.value) { toast('Please choose your district'); return; }
+        body.address = { line1: E.line1.value.trim(), city: E.city.value.trim(), district: E.district.value };
+      }
+      var bad = photoProblem(newPhoto); if (bad) { toast(bad); return; }
+      btn.disabled = true;
+      SCG.api('PUT', '/customers/me', body)
+        .then(function () { return newPhoto ? shrinkPhoto(newPhoto).then(function (b) { return SCG.api('POST', '/account/avatar', { file: b, previous: me.avatar }); }) : null; })
+        .then(function () { return SCG.loadCustomer(); })
+        .then(function () { updateAccount(); toast('Your details are saved'); renderAccountApi(); }, function (err) { btn.disabled = false; toast(err.message); });
+    };
+    $('#signOut').onclick = function () { SCG.customerLogout().then(function () { updateAccount(); toast('Signed out'); renderAccountApi(); }); };
+    $('#acctEdit').onclick = function () { var f = $('#profForm'); f.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }); var i = f.querySelector('input'); if (i) i.focus({ preventScroll: true }); };
+  }
+  function renderTokenPage(kind, token) {
+    setTitle(kind === 'verify' ? 'Confirm email' : 'New password');
+    if (kind === 'verify') {
+      app.innerHTML = '<div class="wrap"><div class="panel" style="max-width:520px;margin:30px auto;padding:22px" id="tokBox"><p class="muted">Confirming…</p></div></div>';
+      SCG.api('POST', '/customers/verify-email', { token: token }).then(function () { $('#tokBox').innerHTML = '<h2>Email confirmed ✓</h2><p><a class="btn navy" href="#account">Go to my account</a></p>'; SCG.loadCustomer(); },
+        function (err) { $('#tokBox').innerHTML = '<h2>Link not valid</h2><p>' + esc(err.message) + '</p>'; });
+      return;
+    }
+    app.innerHTML = '<div class="wrap"><form class="panel form" id="rpF" style="max-width:520px;margin:30px auto"><h3>Choose a new password</h3><label class="full">New password (8+ characters)<input name="password" type="password" required minlength="8" autocomplete="new-password"></label><button class="btn navy full" style="grid-column:1/-1">Save password</button><p class="full" id="rpMsg" style="margin:0"></p></form></div>';
+    $('#rpF').onsubmit = function (e) { e.preventDefault(); SCG.api('POST', '/customers/password-reset/confirm', { token: token, password: e.target.elements.password.value }).then(function () { $('#rpMsg').innerHTML = 'Password saved. <a href="#account">Sign in</a>'; }, function (err) { $('#rpMsg').textContent = err.message; }); };
+  }
+
   /* ---------------- other pages ---------------- */
   function renderWishlist() {
     setTitle('Wishlist');
@@ -584,6 +1185,7 @@
   }
   var STEPS = ['Order placed', 'Confirmed', 'Shipped', 'Arrived in Sri Lanka', 'Delivered'];
   function renderTrack(pre) {
+    if (SCG.API) return renderTrackApi(pre);
     setTitle('Track order');
     app.innerHTML = '<div class="wrap"><div class="crumbs"><a href="#">Home</a>›<span>Track my order</span></div>' +
       '<form class="panel form" id="tf" style="max-width:640px;margin:0 auto"><h3>Track your order</h3><label>Order number<input name="id" required value="' + esc(pre || '') + '" placeholder="e.g. SCG1234567"></label><label>Phone number<input name="phone" placeholder="Phone used for the order"></label><button class="btn full" style="grid-column:1/-1">Track</button><div id="tr" class="full"></div></form></div>';
@@ -602,7 +1204,7 @@
   function renderCategories() {
     setTitle('Categories');
     app.innerHTML = '<div class="wrap"><div class="crumbs"><a href="#">Home</a>›<span>Categories</span></div><div class="panel catgrid" style="overflow:hidden">' +
-      db.categories.map(function (c) { var n = db.products.filter(function (p) { return p.category === c.id; }).length; return '<a class="cat" href="#c/' + c.id + '" style="--c:' + (c.icon || '#0b2a6f') + '"><span class="ci">' + catIcon(c) + '</span>' + esc(c.name) + '<small style="color:var(--muted)">' + n + ' items</small></a>'; }).join('') + '</div></div>';
+      db.categories.map(function (c) { var n = db.products.filter(function (p) { return p.category === c.id; }).length; return '<a class="cat" href="#c/' + c.id + '" style="--c:' + (c.icon || '#0b2a6f') + '"><span class="ci">' + catIcon(c) + '</span>' + esc(c.name) + '<small style="color:var(--muted)">' + (n ? n + (n === 1 ? ' item' : ' items') : '&nbsp;') + '</small></a>'; }).join('') + '</div></div>';
   }
   function renderChinaDirect() {
     setTitle('How importing works');
@@ -642,20 +1244,20 @@
   });
 
   /* ---------------- customer account ---------------- */
-  function avatar(p) { var n = String(p.name || '?').trim().split(/\s+/); return '<span class="avatar">' + esc((n[0][0] || '?') + (n[1] ? n[1][0] : '')).toUpperCase() + '</span>'; }
+  function avatar(p) { if (p && p.avatarUrl) return '<span class="avatar has-photo"><img src="' + esc(p.avatarUrl) + '" alt=""></span>'; var n = String(p.name || '?').trim().split(/\s+/); return '<span class="avatar">' + esc((n[0][0] || '?') + (n[1] ? n[1][0] : '')).toUpperCase() + '</span>'; }
   function updateAccount() {
-    var p = SCG.getProfile(), el = $('#accName');
+    var p = SCG.API ? SCG.customer : SCG.getProfile(), el = $('#accName');
     if (el) el.textContent = p ? p.name.split(' ')[0] : 'Account';
     var b = $('#accBtn'); if (b) b.classList.toggle('signed', !!p);
   }
   var TRACK_IDX = { Pending: 0, Confirmed: 1, Shipped: 2, 'Arrived in Sri Lanka': 3, Delivered: 4 };
   function renderAccount() {
+    if (SCG.API) return renderAccountApi();
     setTitle('My account');
     var p = SCG.getProfile();
     if (!p) {
       app.innerHTML = '<div class="wrap"><div class="crumbs"><a href="#">Home</a>›<span>My account</span></div><div class="acct-grid">' +
-        '<div class="panel acct-empty">' + I.user + '<h2>Your account is created with your first order</h2><p>No sign-up form. When you check out, we save your name, phone and address as your Source Connect profile on this device.</p><a class="btn" href="#">Start shopping</a>' +
-          '<button class="btn google" disabled title="Coming soon">' + googleG() + 'Sign in with Google <small>coming soon</small></button></div>' +
+        '<div class="panel acct-empty">' + I.user + '<h2>Your account is created with your first order</h2><p>No sign-up form. When you check out, we save your name, phone and address as your Source Connect profile on this device.</p><a class="btn" href="#">Start shopping</a></div>' +
         '<form class="panel form" id="findAcc"><h3>Already ordered on this device?</h3><p class="full" style="margin:0;color:var(--muted);font-size:13px">Enter the phone number you used and one of your order numbers.</p>' +
           '<label>Phone number<input name="phone" required placeholder="07X XXX XXXX"></label><label>Order number<input name="order" required placeholder="SCG1234567"></label>' +
           '<button class="btn navy full" style="grid-column:1/-1">Find my account</button><p class="full" id="findMsg" style="margin:0;color:var(--red)"></p></form></div></div>';
@@ -692,7 +1294,7 @@
         '<label>City<input name="city" value="' + esc(p.city || '') + '"></label>' +
         '<label>District<select name="district">' + districts.map(function (d) { return '<option' + (d === p.district ? ' selected' : '') + '>' + d + '</option>'; }).join('') + '</select></label>' +
         '<button class="btn navy full" style="grid-column:1/-1">Save details</button></form>' +
-      '<div class="panel acct-side"><button class="btn google" disabled title="Coming soon">' + googleG() + 'Link Google account <small>coming soon</small></button>' +
+      '<div class="panel acct-side">' +
         '<a class="btn line full" href="#wishlist">My wishlist</a><button class="btn line full" id="signOut">Sign out on this device</button>' +
         '<p class="muted" style="font-size:12px;margin:0">Your profile is saved on this device only. Signing out removes it from this device; your orders stay with us.</p></div></div></div></div>';
     $('#profForm').onsubmit = function (e) {
@@ -708,10 +1310,15 @@
       if (added) location.hash = 'cart'; else toast('These products are no longer available');
     };
   }
-  function googleG() { return '<svg viewBox="0 0 48 48" style="width:18px;height:18px;stroke:none"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 38.9 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>'; }
 
   /* ---------------- admin visual editor (only inside the admin preview) ---------------- */
   var PREVIEW = /[?&]preview=1/.test(location.search) && window.parent !== window;
+  // API mode: the admin tells the preview to fetch the saved data again after each save.
+  if (PREVIEW && SCG.API) window.addEventListener('message', function (e) {
+    if (e.origin !== location.origin || !e.data || e.data.type !== 'scg-refresh') return;
+    var y = scrollY;
+    SCG.refresh().then(function () { db = SCG.load(); renderChrome(); route(); scrollTo(0, y); if (window.__edRefresh) __edRefresh(); });
+  });
   if (PREVIEW) (function () {
     document.documentElement.classList.add('is-preview');
     var NAMES = { product: 'Product', banner: 'Banner', category: 'Category', collection: 'Collection', hero: 'Globe headline', services: 'Service icons', flash: 'Flash sale', origins: 'Import countries', header: 'Header & menu', settings: 'Footer & contact', pages: 'Importing page', sections: 'Homepage sections' };
@@ -755,12 +1362,14 @@
       e.preventDefault(); e.stopPropagation();
       var d = info(cur);
       if (b.dataset.a === 'edit') send({ type: 'scg-edit', ed: d.ed, id: d.id, i: d.i, page: location.hash });
-      if (b.dataset.a === 'photo') { file.dataset.ed = d.ed; file.dataset.id = d.id; file.dataset.i = d.i; file.value = ''; file.click(); }
+      if (b.dataset.a === 'photo') { file.dataset.ed = d.ed; file.dataset.id = d.id; file.dataset.i = d.i; file.dataset.poster = cur.classList.contains('pst') ? '1' : ''; file.value = ''; file.click(); }
     });
     file.addEventListener('change', function () {
       var f = file.files[0]; if (!f) return;
       toast('Processing photo…');
-      SCG.imageToDataURL(f, 800).then(function (url) { send({ type: 'scg-photo', ed: file.dataset.ed, id: file.dataset.id, i: +file.dataset.i, url: url }); })
+      // a poster keeps up to 1920 px (its words must stay sharp), a product photo 1600 px, small pictures 900 px
+      var big = file.dataset.poster ? [1920, 0.9] : file.dataset.ed === 'product' ? [1600, 0.85] : [900, 0.8];
+      SCG.imageToDataURL(f, big[0], big[1]).then(function (url) { send({ type: 'scg-photo', ed: file.dataset.ed, id: file.dataset.id, i: +file.dataset.i, url: url }); })
         .catch(function () { toast('That file could not be read as an image'); });
     });
     // tell the admin which page the preview is showing
@@ -806,6 +1415,8 @@
     else if (k === 'wishlist') renderWishlist();
     else if (k === 'account') renderAccount();
     else if (k === 'track') renderTrack(v);
+    else if (k === 'order' && SCG.API) renderOrderApi(String(v || '').toUpperCase());
+    else if ((k === 'verify' || k === 'reset') && SCG.API) renderTokenPage(k, v);
     else if (k === 'categories') renderCategories();
     else if (k === 'china-direct') renderChinaDirect();
     else if (k === 'help') renderHelp();
@@ -834,4 +1445,4 @@
       onDone: function (played) { if (played && !location.hash.replace('#', '')) route(); }
     });
   }
-})();
+});
