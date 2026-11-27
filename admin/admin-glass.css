@@ -276,3 +276,15 @@ th { background: linear-gradient(180deg, rgba(255, 255, 255, .85), rgba(240, 236
   th, .modal-box, .modal-head { -webkit-backdrop-filter: none; backdrop-filter: none; }
   .modal-box { background: #fff; }
 }
+
+/* numbers: lining figures (Playfair's default old-style digits jump above and below the line) */
+body { font-feature-settings: "lnum" 1; }
+
+/* phones: the page title gets the full width; its buttons sit on their own row underneath
+   (titles such as "Import Countries" were broken over two or three lines next to the buttons) */
+@media (max-width: 700px) {
+  .top { flex-wrap: wrap; row-gap: 8px; }
+  .top > div:not(.top-actions) { flex: 1 1 0; min-width: 0; }
+  .top-actions { order: 3; flex: 1 0 100%; margin-left: 0; justify-content: flex-start; }
+  .top-actions:empty { display: none; }
+}

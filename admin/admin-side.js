@@ -51,3 +51,29 @@
   // links added later (permissions, owner pages) get their name as a tooltip too
   new MutationObserver(function () { if (shell.classList.contains('side-mini')) links().forEach(function (a) { if (!a.title) { a.title = label(a); a.setAttribute('aria-label', label(a)); } }); filter(); }).observe(nav, { childList: true });
 })();
+
+/* Dashboard numbers (that page only) count up from zero when they first appear (money keeps its "Rs." and thousands separators).
+   Skipped when the device asks for reduced motion; the final number is always the one the server sent. */
+(function () {
+  'use strict';
+  var view = document.getElementById('view'); if (!view || !window.requestAnimationFrame) return;
+  var reduce = function () { return window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches; };
+  function countUp(el) {
+    if (el.dataset.counted) return; el.dataset.counted = '1';
+    var m = /^(\D*?)(\d{1,3}(?:,\d{3})*|\d+)(\D*)$/.exec(el.textContent.trim()); if (!m) return;
+    var end = +m[2].replace(/,/g, ''); if (!isFinite(end) || end < 2 || reduce()) return;
+    var final = el.textContent, t0 = null, dur = Math.min(1100, 500 + String(end).length * 90);
+    var fmt = function (n) { return m[1] + n.toLocaleString('en-US') + m[3]; };
+    el.setAttribute('aria-label', final.trim());
+    (function step(t) {
+      if (t0 === null) t0 = t;
+      var p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3);   // decelerates into the real value
+      if (!el.isConnected) return;
+      el.textContent = p < 1 ? fmt(Math.round(end * e)) : final;
+      if (p < 1) requestAnimationFrame(step); else el.removeAttribute('aria-label');
+    })(performance.now());
+  }
+  // the Dashboard only: Sales & Profit and other reports show their exact numbers straight away
+  var onDashboard = function () { var h = location.hash.replace('#', '').split('/')[0]; return !h || h === 'dashboard'; };
+  new MutationObserver(function () { if (onDashboard()) Array.prototype.forEach.call(view.querySelectorAll('.stats .stat b'), countUp); }).observe(view, { childList: true, subtree: true });
+})();
