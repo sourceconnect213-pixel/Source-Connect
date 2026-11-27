@@ -1,0 +1,128 @@
+/* =========================================================
+   Seller Center — "harbour at night" glass theme
+   Loaded after admin.css. It changes only the look (colour, depth, shape); every size rule, grid and behaviour
+   stays in admin.css, so removing this file brings back the earlier look exactly.
+   Ideas taken from the reference videos: a floating frosted sidebar with a white "tab" for the open page,
+   one large light glass canvas for the work area, soft glass cards and dark pill actions —
+   all in the shop's own navy and red.
+   ========================================================= */
+:root {
+  --night: #061233;          /* the backdrop: deep harbour navy */
+  --glass: rgba(248, 250, 255, .86);
+  --glass-line: rgba(255, 255, 255, .55);
+  --glass-edge: rgba(11, 42, 111, .10);
+  --lift: 0 1px 0 rgba(255, 255, 255, .9) inset, 0 18px 40px -28px rgba(6, 18, 51, .55);
+  --radius: 16px;
+}
+
+/* the backdrop: night navy with the warm glow of a port light (red) and a cool one (blue) */
+body {
+  background-color: var(--night);
+  background-image:
+    radial-gradient(60vw 50vh at 88% 4%, rgba(215, 20, 26, .30), transparent 60%),
+    radial-gradient(55vw 60vh at 6% 96%, rgba(38, 99, 235, .30), transparent 60%),
+    linear-gradient(160deg, #0b2a6f 0%, #061233 55%, #040b22 100%);
+  background-attachment: fixed;
+}
+
+/* ---------- sidebar: a floating frosted panel ---------- */
+@media (min-width: 901px) {
+  .side { margin: 12px 0 12px 12px; top: 12px; height: calc(100vh - 24px); border-radius: 26px; }
+}
+.side {
+  background: linear-gradient(180deg, rgba(31, 72, 160, .55), rgba(9, 26, 72, .72));
+  -webkit-backdrop-filter: blur(22px) saturate(140%); backdrop-filter: blur(22px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, .14);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .18) inset, 0 30px 60px -30px rgba(0, 0, 0, .7);
+  scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .2) transparent;
+}
+.side-brand img { box-shadow: 0 0 0 3px rgba(255, 255, 255, .18); }
+.side-label { color: rgba(205, 216, 242, .62); }
+.side nav a { border-radius: 14px; color: #dfe7fa; border: 1px solid transparent; }
+.side nav a:hover { background: rgba(255, 255, 255, .09); border-color: rgba(255, 255, 255, .10); }
+/* the open page: a white tab, the shop red marks it */
+.side nav a.active {
+  background: #fff; color: var(--navy); font-weight: 600;
+  box-shadow: 0 12px 24px -14px rgba(0, 0, 0, .65), inset 3px 0 0 var(--red);
+}
+.side nav a.active svg { color: var(--red); }
+.side nav a.active .pill { background: var(--red); color: #fff; }
+.side nav a:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.side-foot .btn.ghost { border-radius: 14px; background: rgba(255, 255, 255, .06); }
+.side-foot .btn.ghost:hover { background: rgba(255, 255, 255, .14); }
+
+/* phones and tablets: the sidebar slides in as a floating panel */
+@media (max-width: 900px) {
+  .side { left: 10px; top: 10px; height: calc(100vh - 20px); border-radius: 24px; transform: translateX(calc(-100% - 20px));
+    background: linear-gradient(180deg, rgba(25, 62, 145, .92), rgba(7, 20, 58, .96)); }
+  .side.open { transform: none; box-shadow: 0 0 0 100vmax rgba(3, 8, 24, .55); }
+}
+
+/* ---------- the work area: one large light glass canvas ---------- */
+.main {
+  margin: 12px; min-height: calc(100vh - 24px); border-radius: 28px; overflow: clip;
+  background: linear-gradient(180deg, rgba(246, 248, 253, .97), rgba(236, 241, 250, .95));
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .9) inset, 0 40px 80px -40px rgba(0, 0, 0, .6);
+}
+@media (max-width: 900px) { .main { margin: 8px; min-height: calc(100vh - 16px); border-radius: 22px; } }
+.top {
+  background: rgba(246, 248, 253, .78);
+  -webkit-backdrop-filter: blur(16px) saturate(150%); backdrop-filter: blur(16px) saturate(150%);
+  border-bottom: 1px solid var(--glass-edge);
+}
+.top h2 { color: var(--ink); letter-spacing: -.01em; }
+.menu-btn { background: var(--ink); color: #fff; border-radius: 14px; }
+.menu-btn:hover { background: var(--navy); }
+
+/* ---------- cards ---------- */
+.panel, .stat, .table-wrap, .item-card {
+  background: var(--glass); border: 1px solid var(--glass-line);
+  box-shadow: var(--lift), 0 0 0 1px var(--glass-edge);
+}
+.panel { border-radius: 22px; }
+.stat { border-radius: 20px; }
+.stat::after { opacity: .12; width: 110px; height: 110px; right: -38px; top: -38px; }
+.stat b { color: var(--ink); }
+.table-wrap { border-radius: 18px; }
+th { background: rgba(238, 242, 250, .92); }
+tbody tr:hover { background: rgba(11, 42, 111, .035); }
+.item-card { border-radius: 20px; }
+/* a panel inside a panel stays quiet */
+.panel .panel, .panel .table-wrap, .modal-box .table-wrap { box-shadow: none; background: #fff; border-color: var(--line); }
+
+/* ---------- buttons: pills; the main action keeps the shop red, secondary dark actions are ink ---------- */
+.btn { border-radius: 999px; }
+.btn.sm { border-radius: 999px; }
+.btn:not(.primary):not(.dark):not(.danger):not(.ghost):not(.link) { background: rgba(255, 255, 255, .85); }
+.btn.primary { box-shadow: 0 10px 22px -12px rgba(215, 20, 26, .8); }
+.btn.dark { background: var(--ink); border-color: var(--ink); }
+.btn.dark:hover { background: var(--navy); }
+.btn:focus-visible, .icon-btn:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; }
+.filters .chip { border-radius: 999px; background: rgba(255, 255, 255, .85); }
+.filters .chip.on { background: var(--ink); border-color: var(--ink); }
+input, select, textarea { border-radius: 12px; }
+
+/* ---------- pop-ups and messages ---------- */
+.modal .scrim { background: rgba(4, 11, 34, .55); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.modal-box { border-radius: 24px; box-shadow: 0 40px 90px -30px rgba(0, 0, 0, .6); }
+.toast { background: rgba(6, 18, 51, .92); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, .12); }
+.pv-fab { background: var(--ink); }
+
+/* ---------- live preview pane sits on the same night backdrop ---------- */
+.pv { background: rgba(223, 228, 238, .92); }
+
+/* ---------- sign-in: the card becomes frosted glass over the night backdrop ---------- */
+.login-card {
+  background: rgba(255, 255, 255, .9);
+  -webkit-backdrop-filter: blur(20px) saturate(140%); backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, .6); border-radius: 28px;
+}
+
+/* no glass blur where the device asks for less transparency or motion */
+@media (prefers-reduced-transparency: reduce) {
+  .side, .top, .toast, .login-card, .modal .scrim { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .side { background: #0b2a6f; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .side { transition: none; }
+}

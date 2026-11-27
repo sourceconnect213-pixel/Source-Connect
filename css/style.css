@@ -828,3 +828,32 @@ img.ia.ia-in { animation: iaIn .75s cubic-bezier(.22, 1, .36, 1) backwards; }
 .g-btn svg { flex: none; }
 .g-or { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; }
 .g-or::before, .g-or::after { content: ""; flex: 1; border-top: 1px solid var(--line, #e5e7eb); }
+
+/* My account (signed-in): a profile card — banner, photo on the edge, four order numbers */
+.acct-hero { display: block; padding: 0; overflow: hidden; border-radius: 22px; }
+.acct-banner { height: 104px; background:
+  radial-gradient(120% 140% at 92% 0%, rgba(215,20,26,.55), transparent 55%),
+  radial-gradient(90% 120% at 10% 110%, rgba(56,110,230,.55), transparent 60%),
+  linear-gradient(120deg, #0b2a6f, #133a8e 55%, #0b2a6f); position: relative; }
+/* faint shipping-lane arcs: the import route this shop is about */
+.acct-banner::after { content: ""; position: absolute; inset: 0; opacity: .35; background:
+  radial-gradient(closest-side, transparent 96%, rgba(255,255,255,.55) 97%, transparent 99%) 70% 160% / 520px 300px no-repeat,
+  radial-gradient(closest-side, transparent 96%, rgba(255,255,255,.35) 97%, transparent 99%) 78% 190% / 760px 360px no-repeat; }
+.acct-id { display: flex; align-items: flex-start; gap: 16px; padding: 0 22px; margin-top: -40px; position: relative; flex-wrap: wrap; }
+.acct-hero .avatar { width: 84px; height: 84px; font-size: 28px; box-shadow: 0 0 0 4px #fff, 0 14px 28px -14px rgba(11,42,111,.6); }
+.acct-who { padding-top: 48px; min-width: 0; flex: 1 1 200px; }   /* the name always sits below the banner */
+.acct-who h2 { margin: 0; font-size: 22px; }
+.acct-who small { color: var(--muted); overflow-wrap: anywhere; }
+.acct-edit { margin-left: auto; margin-top: 52px; border-radius: 999px; }
+.acct-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 16px 22px 20px; }
+.acct-kpis > div { border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; background: linear-gradient(180deg, #fff, #f7f9fd); }
+.acct-kpis small { display: block; color: var(--muted); font-size: 12px; }
+.acct-kpis b { display: block; margin-top: 2px; font-size: 22px; color: var(--navy); font-variant-numeric: tabular-nums; }
+@media (max-width: 560px) {
+  .acct-banner { height: 84px; }
+  .acct-id { padding: 0 16px; margin-top: -34px; }
+  .acct-hero .avatar { width: 70px; height: 70px; font-size: 24px; }
+  .acct-who { padding-top: 40px; }
+  .acct-edit { margin: 0; }
+  .acct-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 14px 16px 16px; }
+}

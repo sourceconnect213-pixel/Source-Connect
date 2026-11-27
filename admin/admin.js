@@ -155,14 +155,16 @@
     pages: { title: 'Importing Page & FAQ', sub: '“How importing works” page and help answers', render: pages },
     settings: { title: 'Store Settings', sub: 'Contact, delivery, payments, login and backup', render: settings }
   };
-  var previewGlobe = null;
+  var previewGlobe = null, staffFirst = '';
+  // a greeting by the time of day (Sri Lanka time on the owner's device)
+  function greeting() { var h = new Date().getHours(); return (h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening') + (staffFirst ? ', ' + staffFirst : ''); }
   function route() {
     if (!loggedIn()) return;
     if (previewGlobe) { previewGlobe.destroy(); previewGlobe = null; }
     var parts = location.hash.replace('#', '').split('/');
     var key = VIEWS[parts[0]] ? parts[0] : (parts[0] === 'hero' ? 'banners' : 'dashboard');
     $$('#sideNav a').forEach(function (a) { a.classList.toggle('active', a.dataset.v === key); });
-    $('#viewTitle').textContent = VIEWS[key].title; $('#viewSub').textContent = VIEWS[key].sub;
+    $('#viewTitle').textContent = VIEWS[key].title; $('#viewSub').textContent = key === 'dashboard' ? greeting() + '. ' + VIEWS[key].sub + '.' : VIEWS[key].sub;
     $('#side').classList.remove('open');
     var v = $('#view'); v.onclick = null; v.onchange = null; v.oninput = null;
     v.style.animation = 'none'; void v.offsetWidth; v.style.animation = '';
@@ -1458,6 +1460,7 @@
         var st = $('#sideNav a[data-v=staff]'); if (st) st.insertAdjacentHTML('beforeend', ' <span class="pill" id="acPill"></span>');
       }
       $$('#sideNav a[data-v]').forEach(function (a) { var p = NEED[a.dataset.v]; a.hidden = !!(p && !can(p)); });
+      if (me) staffFirst = String(me.displayName || me.username || '').trim().split(/\s+/)[0] || '';
       var who = $('.side-brand small'); if (who && me) who.textContent = (me.displayName || me.username).toUpperCase() + ' · ' + (me.mainAdmin ? 'MAIN ADMIN' : 'CO-ADMIN');
       checkRenewals(); checkAccessRequests(); checkReturns();
     }

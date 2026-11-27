@@ -1101,7 +1101,10 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
       return;
     }
     var newPhoto = null;
-    app.innerHTML = '<div class="wrap"><div class="crumbs"><a href="#">Home</a>›<span>My account</span></div><div class="panel acct-head">' + avatar(me) + '<div><h2>Hello, ' + esc(me.name.split(' ')[0]) + '</h2><small>' + esc(me.email || '') + '</small></div></div>' +
+    app.innerHTML = '<div class="wrap"><div class="crumbs"><a href="#">Home</a>›<span>My account</span></div><div class="panel acct-head acct-hero"><div class="acct-banner" aria-hidden="true"></div>' +
+      '<div class="acct-id">' + avatar(me) + '<div class="acct-who"><h2>Hello, ' + esc(me.name.split(' ')[0]) + '</h2><small>' + esc(me.email || '') + '</small></div>' +
+        '<button type="button" class="btn line sm acct-edit" id="acctEdit">Edit my details</button></div>' +
+      '<div class="acct-kpis" id="acctKpis"><div><small>Orders</small><b data-k="all">–</b></div><div><small>On the way</small><b data-k="open">–</b></div><div><small>Delivered</small><b data-k="done">–</b></div><div><small>Wishlist</small><b>' + SCG.getWish().length + '</b></div></div></div>' +
       '<div class="acct-grid"><div class="panel" id="myOrders"><p class="muted" style="padding:16px">Loading your orders…</p></div><div>' +
       '<form class="panel form" id="profForm"><h3>My details</h3><label class="full">Full name<input name="name" required minlength="2" maxlength="80" value="' + esc(me.name) + '"></label>' +
         '<label>Phone number<input name="phone" type="tel" maxlength="20" ' + PHONE + ' value="' + esc(me.phone || '') + '"></label>' +
@@ -1118,6 +1121,9 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
       SCG.api('POST', '/account/avatar', { file: null, previous: me.avatar }).then(function (r) { SCG.customer = r.customer; updateAccount(); toast('Photo removed'); renderAccountApi(); }, function (err) { toast(err.message); });
     };
     SCG.api('GET', '/account/orders').then(function (list) {
+      var kp = { all: list.length, open: 0, done: 0 };
+      list.forEach(function (o) { if (o.status === 'delivered') kp.done++; else if (!{ cancelled: 1, expired: 1, refunded: 1 }[o.status]) kp.open++; });
+      Array.prototype.forEach.call(document.querySelectorAll('#acctKpis b[data-k]'), function (b) { b.textContent = kp[b.dataset.k]; });
       $('#myOrders').innerHTML = '<div class="sec-head" style="padding:14px 16px 0"><h2 style="font-size:17px">My orders</h2></div>' + (list.length ? list.map(function (o) {
         var idx = ST_IDX[o.status] === undefined ? -1 : ST_IDX[o.status], bad = { cancelled: 1, expired: 1, refunded: 1 }[o.status];
         return '<div class="acct-order"><div class="ao-top"><b>' + esc(o.number) + '</b><span class="ao-status ' + (bad ? 'x' : o.status === 'delivered' ? 'ok' : '') + '">' + esc(ST_LABEL[o.status] || o.status) + '</span><span class="muted">' + new Date(o.placedAt).toLocaleDateString() + ' · ' + money(o.total) + '</span></div>' +
@@ -1152,6 +1158,7 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
         .then(function () { updateAccount(); toast('Your details are saved'); renderAccountApi(); }, function (err) { btn.disabled = false; toast(err.message); });
     };
     $('#signOut').onclick = function () { SCG.customerLogout().then(function () { updateAccount(); toast('Signed out'); renderAccountApi(); }); };
+    $('#acctEdit').onclick = function () { var f = $('#profForm'); f.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }); var i = f.querySelector('input'); if (i) i.focus({ preventScroll: true }); };
   }
   function renderTokenPage(kind, token) {
     setTitle(kind === 'verify' ? 'Confirm email' : 'New password');
