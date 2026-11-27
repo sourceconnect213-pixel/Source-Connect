@@ -156,6 +156,9 @@
     settings: { title: 'Store Settings', sub: 'Contact, delivery, payments, login and backup', render: settings }
   };
   var previewGlobe = null, staffFirst = '';
+  // small line icons in place of emoji (the same icon family as the menu)
+  var WARN = '<svg class="ico-in" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3L2 21h20zM12 10v5M12 18h.01"/></svg>';
+  var CLOCK = '<svg class="ico-in" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
   // a greeting by the time of day (Sri Lanka time on the owner's device)
   function greeting() { var h = new Date().getHours(); return (h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening') + (staffFirst ? ', ' + staffFirst : ''); }
   function route() {
@@ -371,7 +374,7 @@
       db.categories.map(function (c) {
         var n = countIn(c.id);
         return '<div class="bar-row"><a href="#products/cat:' + c.id + '">' + esc(c.name) + '</a><div class="bar-track"><i style="width:' + (n / max * 100) + '%"></i></div><b>' + n + '</b></div>' +
-          (n < MIN_PER_CATEGORY ? '<div class="warn-text">⚠ ' + esc(c.name) + ' needs ' + (MIN_PER_CATEGORY - n) + ' more item(s)</div>' : '');
+          (n < MIN_PER_CATEGORY ? '<div class="warn-text">' + WARN + esc(c.name) + ' needs ' + (MIN_PER_CATEGORY - n) + ' more item(s)</div>' : '');
       }).join('') + '</div></div>' +
       '<div class="panel"><h3>Top selling products</h3><div class="top-list">' + top.map(function (p) {
         return '<a href="#products/edit:' + p.id + '">' + thumb(p) + '<span>' + esc(p.name) + '<br><small class="muted">' + money(p.price) + '</small></span><b>' + p.sold + ' sold</b></a>';
@@ -1671,7 +1674,7 @@
         b.hidden = !due.length;
         b.innerHTML = due.map(function (r) {
           var what = r.cycle === 'once' ? (r.status === 'overdue' ? 'ended' : 'ends') : 'renews';
-          return '<a href="#renewals"><b>' + (r.status === 'overdue' ? '⚠ ' : '⏰ ') + esc(r.name) + '</b> ' + what + ' <b>' + rnWhen(r.daysLeft) + '</b> (' + rnDate(r.dueOn) + ')' +
+          return '<a href="#renewals"><b>' + (r.status === 'overdue' ? WARN : CLOCK) + esc(r.name) + '</b> ' + what + ' <b>' + rnWhen(r.daysLeft) + '</b> (' + rnDate(r.dueOn) + ')' +
             (r.provider ? ' · ' + esc(r.provider) : '') + (r.note ? ' — ' + esc(r.note) : '') + '</a>';
         }).join('');
       }, function () {});
@@ -1759,10 +1762,10 @@
       SCG.api('GET', '/admin/dashboard').then(function (d) { if (location.hash !== h0) return;
         var dmax = Math.max.apply(null, d.last7days.map(function (x) { return x.total; }).concat([1]));
         var alerts = [];
-        if (d.needsReview) alerts.push('<a href="#orders/review">⚠ ' + d.needsReview + ' order(s) need review (late payment, chargeback…)</a>');
+        if (d.needsReview) alerts.push('<a href="#orders/review">' + WARN + d.needsReview + ' order(s) need review (late payment, chargeback…)</a>');
         if (d.payments.bank) alerts.push('<a href="#orders/awaiting_bank_transfer">' + d.payments.bank + ' bank transfer(s) to check</a>');
         if (d.payments.cod_uncollected) alerts.push(d.payments.cod_uncollected + ' delivered COD order(s) with cash not yet recorded');
-        if (d.backups && !d.backups.ok) alerts.push('<a href="#backups">⚠ Backups: ' + esc(d.backups.problems.join(' ')) + '</a>');
+        if (d.backups && !d.backups.ok) alerts.push('<a href="#backups">' + WARN + 'Backups: ' + esc(d.backups.problems.join(' ')) + '</a>');
         if (!d.payhere.configured) alerts.push('Card payments (PayHere) are not set up on the server yet');
         else if (d.payhere.mode === 'sandbox') alerts.push('PayHere is in SANDBOX (test) mode — no real money is taken');
         var bk = $('#bkPill'); if (bk) { bk.textContent = d.backups && !d.backups.ok ? '!' : ''; bk.className = 'pill' + (d.backups && !d.backups.ok ? ' red' : ''); }
@@ -1801,7 +1804,7 @@
     var of = { status: '', q: '' };
     VIEWS.orders.render = function (v, arg) {
       if (arg === 'review') { of.status = 'review'; } else if (arg && ST[arg]) of.status = arg; else if (arg && /^SC-/.test(arg)) { orderModal(arg); }
-      v.innerHTML = '<div class="filters" id="otabs">' + [['', 'All']].concat([['review', '⚠ Needs review']]).concat(Object.keys(ST).map(function (k) { return [k, ST[k]]; })).map(function (t) {
+      v.innerHTML = '<div class="filters" id="otabs">' + [['', 'All']].concat([['review', 'Needs review']]).concat(Object.keys(ST).map(function (k) { return [k, ST[k]]; })).map(function (t) {
         return '<button class="chip' + (of.status === t[0] ? ' on' : '') + '" data-st="' + t[0] + '">' + esc(t[1]) + '</button>'; }).join('') + '</div>' +
         '<div class="panel" style="padding:0"><div style="padding:12px"><input id="oq" type="search" aria-label="Search orders" placeholder="Search order number, name, phone or email" value="' + esc(of.q) + '"></div><div id="olist"><p class="muted" style="padding:12px">Loading…</p></div></div>';
       function load() {
@@ -1832,7 +1835,7 @@
         if (o.needsReview && can('payments.verify')) acts.push('<button class="btn" data-act="resolve">Mark review as resolved</button>');
         if (!/cancelled|expired|refunded/.test(o.status)) acts.push('<button class="btn danger" data-act="cancel">' + (o.paymentStatus === 'paid' || o.paymentStatus === 'cod_collected' ? 'Refund / cancel' : 'Cancel order') + '</button>');
         $('#modalBody').innerHTML =
-          (o.needsReview ? '<div class="co-err">⚠ Needs review: ' + esc(o.reviewReason) + '</div>' : '') +
+          (o.needsReview ? '<div class="co-err">' + WARN + 'Needs review: ' + esc(o.reviewReason) + '</div>' : '') +
           '<div class="grid2"><div><p><b>' + esc(ST[o.status] || o.status) + '</b> · ' + esc(METHOD[o.paymentMethod]) + ' · <b>' + esc(PAY[o.paymentStatus] || o.paymentStatus) + '</b></p>' +
             (c.phone ? '<p>' + esc(c.name) + '<br><a href="tel:' + esc(c.phone) + '">' + esc(c.phone) + '</a> · <a target="_blank" rel="noopener" href="https://wa.me/' + esc(String(c.phone).replace(/\D/g, '').replace(/^0/, '94')) + '">WhatsApp</a>' + (c.email ? '<br>' + esc(c.email) : '') + '<br>' + esc(c.address) + ', ' + esc(c.city) + ', ' + esc(c.district) + (c.note ? '<br><i>Note: ' + esc(c.note) + '</i>' : '') + '</p>' : '<p class="muted">Customer details hidden (no permission).</p>') +
           '</div><div>' + o.items.map(function (it) { return '<div class="sum-row"><span>' + esc(it.name) + ' <small class="muted">' + esc(it.variant) + ' ×' + it.qty + ' · ' + esc(it.sku) + '</small></span><span>' + rs(it.lineTotal) + '</span></div>'; }).join('') +

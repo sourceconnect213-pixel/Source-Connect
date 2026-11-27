@@ -187,3 +187,41 @@ input, select, textarea { border-radius: 12px; }
 .stats > .stat:first-child small { color: rgba(255, 255, 255, .78); }
 .stats > .stat:first-child b { color: #fff; }
 .stats > .stat:first-child::after { background: var(--red); opacity: .35; }
+
+/* =========================================================
+   Liquid Glass finish (UI UX Pro Max "liquid-glass" + Apple's material rules): specular rims on the glass
+   chrome, a felt press on controls, 44 px touch targets, opaque fallback.
+   ========================================================= */
+.main, .side-search, .side-me { position: relative; }
+.side::after, .main::after, .login-card::after, .modal-box::after, .side-search::after, .side-me::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none;
+  background: linear-gradient(135deg, rgba(255, 255, 255, .9), rgba(255, 255, 255, .18) 32%, rgba(255, 255, 255, 0) 58%, rgba(255, 255, 255, .5));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+.side::after, .side-search::after, .side-me::after { background: linear-gradient(135deg, rgba(255, 255, 255, .5), rgba(255, 255, 255, .06) 35%, rgba(255, 255, 255, 0) 60%, rgba(255, 255, 255, .22)); }
+.modal-box::after { position: sticky; display: block; height: 0; inset: auto; padding: 0; }   /* the pop-up scrolls inside: no rim there */
+#editSite svg { width: 16px; height: 16px; }
+.btn, .side nav a, .icon-btn, .filters .chip { transition: background-color .18s, color .18s, border-color .18s, box-shadow .2s, transform .12s; }
+.btn:active:not(:disabled), .side nav a:active, .icon-btn:active, .filters .chip:active { transform: scale(.97); }
+@media (pointer: coarse) {
+  .side nav a { min-height: 44px; }
+  .menu-btn, .icon-btn { width: 44px; height: 44px; }
+  .btn:not(.sm) { min-height: 44px; }
+  .btn.sm { position: relative; }
+  .btn.sm::after { content: ""; position: absolute; inset: -8px -3px; }   /* small table buttons: 44 px to a finger */
+  .side-search input { height: 100%; }
+  #menuBtn { flex: none; }
+  .pw-eye::after { content: ""; position: absolute; inset: -4px; border-radius: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn:active, .side nav a:active, .icon-btn:active, .filters .chip:active { transform: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .side::after, .main::after, .login-card::after, .modal-box::after, .side-search::after, .side-me::after { display: none; }
+}
+.ico-in { width: 15px; height: 15px; vertical-align: -2px; margin-right: 5px; flex: none; }
+/* brand line under "SC Global": one line, never broken over three (the full name and role sit in the card below) */
+.side-brand > div { min-width: 0; }
+.side-brand small { display: block; letter-spacing: .14em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #ff8a8d; }
+@media (pointer: coarse) { .checklist .ck a:not(.btn) { display: inline-flex; align-items: center; min-height: 44px; } }

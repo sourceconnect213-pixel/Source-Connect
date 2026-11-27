@@ -101,7 +101,7 @@ SCG.whenReady(function () {   // waits for the server's catalogue in API mode (i
     $('#announce').innerHTML = ann + ann;
     $('#searchCat').innerHTML = '<option value="">All categories</option>' + db.categories.map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + '</option>'; }).join('');
     // the categories menu opens as a wide glass panel: every category as a tile, then quick links and one main action
-    $('#catsMenu').innerHTML = catListHTML() + '<div class="mega-foot"><a href="#flash">⚡ Flash Sale</a><a href="#china-direct">How importing works</a><a href="#track">Track my order</a><a class="mega-cta" href="#shop">Shop all products</a></div>';
+    $('#catsMenu').innerHTML = catListHTML() + '<div class="mega-foot"><a href="#flash"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></svg>Flash Sale</a><a href="#china-direct">How importing works</a><a href="#track">Track my order</a><a class="mega-cta" href="#shop">Shop all products</a></div>';
     $('#drawerLinks').innerHTML = catListHTML() + '<div class="catlist" style="border-top:1px solid var(--line);margin-top:6px;padding-top:6px">' +
       '<a href="#flash">⚡ Flash Sale</a>' + db.collections.map(function (c) { return '<a href="#col/' + c.id + '">' + esc(c.name) + '</a>'; }).join('') +
       '<a href="#track">Track My Order</a><a href="#china-direct">How Importing Works</a></div>';

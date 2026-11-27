@@ -139,3 +139,45 @@ input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea
   .header::before { background: var(--navy); }
   .navbar-inner, .cats-menu, .bottom-nav, .suggest { background: #fff; }
 }
+
+/* =========================================================
+   Liquid Glass finish (UI UX Pro Max "liquid-glass" style + Apple's material rules):
+   glass is for navigation and controls, content stays on its own calm layer; every glass edge catches light
+   from the top-left (a specular rim); controls answer a press; opaque fallback when the device asks for it.
+   ========================================================= */
+.navbar-inner { position: relative; }
+.header::after, .navbar-inner::after, .cats-menu::after, .bottom-nav::after, .drawer::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none; z-index: 1;
+  background: linear-gradient(135deg, rgba(255, 255, 255, .9), rgba(255, 255, 255, .18) 32%, rgba(255, 255, 255, 0) 58%, rgba(255, 255, 255, .5));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+.header::after { background: linear-gradient(135deg, rgba(255, 255, 255, .55), rgba(255, 255, 255, .08) 35%, rgba(255, 255, 255, 0) 60%, rgba(255, 255, 255, .28)); }
+.drawer::after { position: fixed; top: 0; bottom: 0; left: 0; width: inherit; }
+
+/* a press is felt: controls dip slightly (transform only, so nothing around them moves) */
+.btn, .navbar a, .mega-foot a, .hbtn, .bottom-nav a, .heart, .add-mini button, .cats-menu .catlist a { transition: background-color .18s, color .18s, box-shadow .2s, transform .12s; }
+.btn:active:not(:disabled), .navbar a:active, .mega-foot a:active, .hbtn:active, .bottom-nav a:active, .add-mini button:active:not(:disabled), .cats-menu .catlist a:active { transform: scale(.97); }
+.mega-foot a { display: inline-flex; align-items: center; gap: 6px; }
+.mega-foot svg { width: 16px; height: 16px; color: var(--red); }
+
+/* touch screens: every control is at least 44 × 44 px (the skill's "touch & interaction" rule) */
+@media (pointer: coarse) {
+  .burger, .icon-btn { width: 44px; height: 44px; }
+  .hbtn { min-width: 44px; min-height: 44px; justify-content: center; }
+  .search { height: 44px; }
+  .drawer .catlist a { min-height: 44px; }
+  .btn { min-height: 44px; }
+  .add-mini button { min-height: 44px; }
+  .heart::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; }   /* 32px icon, 44px target */
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]), select { min-height: 44px; }
+  .search input, .search select { min-height: 0; }
+  .logo { min-height: 44px; }
+  .pw-eye::after { content: ""; position: absolute; inset: -4px; border-radius: 12px; }   /* 36px icon, 44px target */
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn:active, .navbar a:active, .mega-foot a:active, .hbtn:active, .bottom-nav a:active, .add-mini button:active, .cats-menu .catlist a:active { transform: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .header::after, .navbar-inner::after, .cats-menu::after, .bottom-nav::after, .drawer::after { display: none; }
+}
